@@ -64,6 +64,24 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS clv_bets (
+    id            SERIAL PRIMARY KEY,
+    match_id      VARCHAR(64),
+    match_name    VARCHAR(255) NOT NULL,
+    market        VARCHAR(64)  NOT NULL DEFAULT '1X2',
+    selection     VARCHAR(128),
+    bet_odds      DECIMAL(6,3) NOT NULL,
+    closing_odds  DECIMAL(6,3),
+    clv_pct       DECIMAL(6,2),
+    stake         DECIMAL(10,2) NOT NULL DEFAULT 10,
+    result        VARCHAR(10),   -- win | loss | void
+    pnl           DECIMAL(10,2),
+    settled       BOOLEAN DEFAULT FALSE,
+    bet_date      TIMESTAMPTZ DEFAULT NOW(),
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS clv_bets_date_idx ON clv_bets(bet_date DESC);
+
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, email, role) 
 VALUES ('admin', '$2b$10$rQZ9K1mN2vX4yL6wH8pJ5eBfDgCsIt7oMrAkPuWnYxV3TqEj0.hei', 'admin@betquant.pro', 'admin')

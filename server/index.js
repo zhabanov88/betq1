@@ -92,6 +92,17 @@ app.locals.clickhouse = clickhouse;
 const neuralRoutes = require('./neural');
 app.use('/api/neural', neuralRoutes);
 
+// ── Приоритет 1: Live Monitor, Value Finder, CLV ──────────────────────────
+app.locals.pgPool = pgPool;   // если ещё не прописано
+
+const liveRoutes  = require('./routes/live');
+const valueRoutes = require('./routes/value');
+const clvRoutes   = require('./routes/clv');
+
+app.use('/api/live',  liveRoutes);
+app.use('/api/value', valueRoutes);
+app.use('/api/clv',   clvRoutes);
+
 // ── Auth middleware ─────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
   if (req.session?.userId || req.session?.demo) return next();

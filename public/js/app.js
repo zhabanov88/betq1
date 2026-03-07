@@ -104,6 +104,8 @@ const app = {
     if (name === 'neural' && typeof neuralPanel !== 'undefined') {
       neuralPanel.init();
     }
+    if (name === 'live' && typeof liveMonitor !== 'undefined') liveMonitor.init();
+    if (name === 'clv'  && typeof clvTracker  !== 'undefined') clvTracker.init();
   },
   
   setSport(sport) {

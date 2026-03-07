@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="/css/neural.css">
+    <link rel="stylesheet" href="/css/live-value-clv.css">
 </head>
 <body class="dark-mode">
 <div id="loginScreen" class="login-screen">
@@ -62,6 +63,13 @@
             <button class="sidebar-btn" data-panel="charts" onclick="app.showPanel('charts')"><span class="sidebar-icon">📈</span> Charts & Odds</button>
             <button class="sidebar-btn" data-panel="stats" onclick="app.showPanel('stats')"><span class="sidebar-icon">📊</span> Statistics</button>
             <button class="sidebar-btn" data-panel="value" onclick="app.showPanel('value')"><span class="sidebar-icon">💎</span> Value Finder</button>
+            <button class="sidebar-btn" data-panel="live" onclick="app.showPanel('live')">
+                <span class="sidebar-icon">🔴</span> Live Monitor
+                <span class="lm-badge" style="display:none"></span>
+              </button>
+              <button class="sidebar-btn" data-panel="clv" onclick="app.showPanel('clv')">
+                <span class="sidebar-icon">📐</span> CLV Tracker
+              </button>
         </div>
         <div class="sidebar-section">
             <div class="sidebar-label">BACKTEST</div>
@@ -126,22 +134,60 @@
             </div>
         </div>
         <!-- CHARTS -->
-        <div class="panel" id="panel-charts">
-            <div class="panel-header"><h2>Charts & Odds Analysis</h2>
+        <div class="panel" id="panel-value">
+            <div class="panel-header">
+                <h2>💎 Value Finder</h2>
                 <div class="panel-controls">
-                    <input type="text" class="ctrl-input" id="chartTeamSearch" placeholder="Team or League...">
-                    <select class="ctrl-select" id="chartMarket"><option value="1x2">1X2</option><option value="ou25">O/U 2.5</option><option value="btts">BTTS</option><option value="ah">Asian Handicap</option></select>
-                    <select class="ctrl-select" id="chartBookmaker"><option value="pinnacle">Pinnacle</option><option value="bet365">Bet365</option><option value="betfair">Betfair</option></select>
-                    <button class="ctrl-btn primary" onclick="oddsChart.load()">Load</button>
+                <button class="ctrl-btn primary" id="vfScanBtn" onclick="valueFinder.scan()">🔍 Сканировать</button>
                 </div>
             </div>
-            <div class="charts-main-grid">
-                <div class="odds-chart-container"><div class="chart-card-header"><span id="oddsChartTitle">Odds Movement</span><div class="chart-legend"><span class="legend-item home">● Home</span><span class="legend-item draw">● Draw</span><span class="legend-item away">● Away</span></div></div><canvas id="chartOddsMovement" height="280"></canvas></div>
-                <div class="odds-table-container"><div class="chart-card-header"><span>Odds Comparison</span></div><div id="oddsComparisonTable" class="data-table-container"></div></div>
+            <div class="value-layout">
+                <div class="value-filters" id="vfFilters"></div>
+                <div class="value-results">
+                <div id="vfSummary" class="vf-summary"></div>
+                <div id="valueScanProgress" style="display:none" class="progress-bar-wrap">
+                    <div class="progress-bar" id="valueScanBar" style="width:100%;animation:progressAnim 1s infinite"></div>
+                </div>
+                <div id="vfResultsTable" class="data-table-container large"></div>
+                <div class="chart-card" style="margin-top:16px">
+                    <div class="chart-card-header"><span>Edge % по ставкам (топ-12)</span></div>
+                    <canvas id="chartVFValue" height="200"></canvas>
+                </div>
+                </div>
             </div>
-            <div class="chart-grid-2col">
-                <div class="chart-card"><div class="chart-card-header"><span>Sharp vs Public</span></div><canvas id="chartSharpPublic" height="200"></canvas></div>
-                <div class="chart-card"><div class="chart-card-header"><span>Opening vs Closing Line</span></div><canvas id="chartOpenClose" height="200"></canvas></div>
+        </div>
+        <!-- CLV TRACKER -->
+        <div class="panel" id="panel-clv">
+            <div class="panel-header">
+            <h2>📐 CLV Tracker</h2>
+            <div class="panel-controls">
+                <button class="ctrl-btn primary" onclick="clvTracker.openAddModal()">+ Добавить ставку</button>
+                <button class="ctrl-btn" onclick="clvTracker.load()">🔄 Обновить</button>
+            </div>
+            </div>
+            <div id="clvLoading" style="display:none;justify-content:center;padding:20px">
+            <span style="color:var(--text3)">⏳ Загрузка...</span>
+            </div>
+            <div class="clv-layout">
+            <!-- KPI row -->
+            <div class="clv-kpis">
+                <div class="clv-kpi"><div class="clv-kpi-label">Средний CLV</div><div class="clv-kpi-val positive" id="clvAvg">—</div></div>
+                <div class="clv-kpi"><div class="clv-kpi-label">CLV+ ставок</div><div class="clv-kpi-val" id="clvPosRate">—</div></div>
+                <div class="clv-kpi"><div class="clv-kpi-label">Win Rate</div><div class="clv-kpi-val" id="clvWinRate">—</div></div>
+                <div class="clv-kpi"><div class="clv-kpi-label">P&L</div><div class="clv-kpi-val" id="clvPnl">—</div></div>
+                <div class="clv-kpi"><div class="clv-kpi-label">Всего ставок</div><div class="clv-kpi-val" id="clvTotal">—</div></div>
+                <div class="clv-kpi"><div class="clv-kpi-label">Закрытых</div><div class="clv-kpi-val" id="clvSettled">—</div></div>
+            </div>
+            <!-- Интерпретация -->
+            <div id="clvInterpretation" class="clv-interp ok">Загрузка оценки...</div>
+            <!-- Trend chart -->
+            <div class="clv-chart-wrap">
+                <canvas id="clvTrendChart"></canvas>
+            </div>
+            <!-- Table -->
+            <div class="clv-table-wrap">
+                <div id="clvTable" class="data-table-container large"></div>
+            </div>
             </div>
         </div>
         <!-- BACKTEST -->
@@ -612,6 +658,40 @@
             <div id="nn-strategies-panel"><div class="nn-empty">Стратегии появятся после обучения</div></div>
             </div>
         </div>
+        <!-- LIVE MONITOR -->
+        <div class="panel" id="panel-live">
+            <div class="panel-header">
+            <h2>🔴 Live Monitor</h2>
+            <div class="panel-controls">
+                <button class="ctrl-btn primary" onclick="liveMonitor.loadMatches()">🔄 Обновить</button>
+            </div>
+            </div>
+            <div id="lm-grid-loading" style="display:none;justify-content:center;padding:20px">
+            <span style="color:var(--text3)">⏳ Загрузка...</span>
+            </div>
+            <div class="lm-layout">
+            <div class="lm-sidebar">
+                <div>
+                <div class="lm-section-title">🔴 Live сейчас</div>
+                <div id="lm-live-grid"></div>
+                </div>
+                <div>
+                <div class="lm-section-title">🗓 Запланированы</div>
+                <div id="lm-sched-grid"></div>
+                </div>
+            </div>
+            <div class="lm-detail-wrap">
+                <div id="lm-detail-loading" style="display:none;justify-content:center;padding:40px">
+                <span style="color:var(--text3)">⏳ Загрузка...</span>
+                </div>
+                <div id="lm-detail">
+                <div class="lm-empty" style="padding:60px;text-align:center">
+                    👈 Выбери матч из списка слева
+                </div>
+                </div>
+            </div>
+            </div>
+        </div>
     </main>
 </div>
 <!-- Modals -->
@@ -729,5 +809,8 @@
 <script src="js/etl-manager.js"></script>
 <script src="/js/neural.js"></script>
 <script src="/js/neural_frontend.js"></script>
+<script src="/js/live-monitor.js"></script>
+<script src="/js/value-finder.js"></script>
+<script src="/js/clv-tracker.js"></script>
 </body>
 </html>
