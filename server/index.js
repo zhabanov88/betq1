@@ -95,9 +95,9 @@ app.use('/api/neural', neuralRoutes);
 // ── Приоритет 1: Live Monitor, Value Finder, CLV ──────────────────────────
 app.locals.pgPool = pgPool;   // если ещё не прописано
 
-const liveRoutes  = require('./routes/live');
-const valueRoutes = require('./routes/value');
-const clvRoutes   = require('./routes/clv');
+const liveRoutes  = require('./live');
+const valueRoutes = require('./value');
+const clvRoutes   = require('./clv');
 
 app.use('/api/live',  liveRoutes);
 app.use('/api/value', valueRoutes);
@@ -116,18 +116,18 @@ const telegramModule = (() => {
 if (telegramModule) {
   app.use('/api/telegram', telegramModule.router);
   global.__betquant_tg = telegramModule.tgAPI;
+  // Expose tgAPI globally so other routes can trigger alerts
+  global.__betquant_tg    = telegramModule.tgAPI;
+  //global.__betquant_tgStore = tgStore;
+  //global.__betquant_pg    = pgPool;
 }
 
 try {
-  const oddsCompareRoutes = require('./routes/odds-compare');
+  const oddsCompareRoutes = require('./odds-compare');
   app.use('/api/odds-compare', oddsCompareRoutes);
 } catch(e) { console.warn('⚠️  odds-compare route error:', e.message); }
 
 
-// Expose tgAPI globally so other routes can trigger alerts
-global.__betquant_tg    = tgAPI;
-global.__betquant_tgStore = tgStore;
-global.__betquant_pg    = pgPool;
 
 // ── Auth middleware ─────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
