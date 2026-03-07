@@ -28,7 +28,7 @@ import sys
 import time
 from datetime import datetime
 
-import requests, os
+import requests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -273,26 +273,35 @@ def main():
     log.info(f"╠══════════════════════════════════════════════════════════╣")
     log.info(f"║  Total time: {total_time/60:.1f} minutes                              ║")
     log.info("╚══════════════════════════════════════════════════════════╝")
+    
 
-
-    def trigger_retrain(table: str, host: str = 'http://localhost:3000'):
-        """Триггер переобучения нейросети после загрузки данных"""
+# ── Neural auto-retrain trigger ──────────────────────────────────────────────
+def trigger_retrain(tables: list, host: str = 'http://localhost:3000'):
+    """Триггер переобучения нейросетей после загрузки данных"""
+    import requests as _requests
+    for table in tables:
         try:
-            r = requests.post(
+            r = _requests.post(
                 f'{host}/api/neural/auto-retrain',
                 json={'table': table},
-                timeout=120  # обучение может занять до 2 мин
+                timeout=180
             )
             data = r.json()
             if data.get('ok'):
-                print(f'✅ Neural retrained for {table}: accuracy {data.get("accuracy")}%')
+                print(f'✅ Neural retrained [{table}]: accuracy {data.get("accuracy")}%')
             else:
-                print(f'⚠️  Neural retrain skipped: {data.get("message")}')
+                print(f'⚠️  Neural retrain skipped [{table}]: {data.get("message")}')
         except Exception as e:
-            print(f'⚠️  Neural retrain failed: {e}')
+            print(f'⚠️  Neural retrain failed [{table}]: {e}')
 
-    # Вызов в конце ETL:
-    trigger_retrain('football_matches')
 
 if __name__ == '__main__':
     main()
+    # Автообучение после загрузки данных
+    betquant_host = os.environ.get('BETQUANT_HOST', 'http://localhost:3000')
+    trigger_retrain([
+        'basketball_matches_v2',
+        'cricket_matches',
+        'rugby_matches',
+        'nfl_games',
+    ], host=betquant_host)

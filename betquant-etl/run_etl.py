@@ -318,6 +318,34 @@ def main():
     # ── Финальный отчёт ──────────────────────────────────────────────
     print_report(ch)
 
+# ── Neural auto-retrain trigger ──────────────────────────────────────────────
+def trigger_retrain(tables: list, host: str = 'http://localhost:3000'):
+    import urllib.request as _req, json as _json
+    for table in tables:
+        try:
+            body = _json.dumps({'table': table}).encode()
+            r = _req.urlopen(
+                _req.Request(
+                    f'{host}/api/neural/auto-retrain',
+                    data=body,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                ), timeout=180
+            )
+            data = _json.loads(r.read())
+            if data.get('ok'):
+                print(f'✅ Neural retrained [{table}]: accuracy {data.get("accuracy")}%')
+            else:
+                print(f'⚠️  Neural retrain skipped [{table}]: {data.get("message")}')
+        except Exception as e:
+            print(f'⚠️  Neural retrain failed [{table}]: {e}')
+
 
 if __name__ == '__main__':
     main()
+    betquant_host = os.environ.get('BETQUANT_HOST', 'http://localhost:3000')
+    trigger_retrain([
+        'football_matches',
+        'hockey_matches',
+        'tennis_matches',
+    ], host=betquant_host)

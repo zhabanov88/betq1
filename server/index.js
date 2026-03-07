@@ -456,6 +456,29 @@ app.post('/api/etl/run', requireAuth, async (req, res) => {
     t.pct     = 100;
     t.message = code === 0 ? '✅ ETL завершён успешно!' : `❌ ETL завершился с кодом ${code}`;
     t.type    = code === 0 ? 'success' : 'error';
+
+    // ── Автообучение нейросетей после успешного ETL ──
+    if (code === 0) {
+      const tableMap = {
+        football:   ['football_matches'],
+        hockey:     ['hockey_matches'],
+        tennis:     ['tennis_matches'],
+        other:      ['tennis_matches'],
+        basketball: ['basketball_matches_v2'],
+        all:        ['football_matches','hockey_matches','tennis_matches','basketball_matches_v2'],
+      };
+      const tables = tableMap[sport] || tableMap['all'];
+      const port = process.env.PORT || 3000;
+      tables.forEach(tbl => {
+        fetch(`http://localhost:${port}/api/neural/auto-retrain`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: tbl }),
+        }).then(r => r.json())
+          .then(d => console.log(`[Neural] Auto-retrain ${tbl}: accuracy ${d.accuracy || '?'}%`))
+          .catch(e => console.warn(`[Neural] Auto-retrain failed ${tbl}:`, e.message));
+      });
+    }
   });
   proc.on('error', (e) => {
     // Python не установлен — запускаем симуляцию

@@ -115,6 +115,7 @@ services:
       CH_PASS:     ""
       ETL_SEASONS: "3"
       ETL_LEAGUES: top
+      BETQUANT_HOST:  http://app:3000
     volumes:
       - etl-cache:/opt/etl-cache
     depends_on:
@@ -141,6 +142,7 @@ services:
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DB:  betquant
       PYTHONUNBUFFERED: "1"
+      BETQUANT_HOST:  http://app:3000
     volumes:
       - etl-cache:/app/cache
     depends_on:
