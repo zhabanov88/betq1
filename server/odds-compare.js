@@ -1,389 +1,242 @@
 'use strict';
 /**
- * BetQuant Pro — Telegram Bot & Push Alerts  /api/telegram/*
+ * BetQuant Pro — Odds Compare API  /api/odds-compare/*
  *
- * Поддерживает два режима:
- *  1. Webhook (production) — Telegram шлёт POST на /api/telegram/webhook
- *  2. Polling  (dev)       — сервер сам опрашивает getUpdates каждые 3 сек
+ * GET /api/odds-compare/fixtures    — список матчей с коэффициентами 8 букмекеров
+ * GET /api/odds-compare/fixture/:id — детали одного матча
+ * GET /api/odds-compare/arbitrage   — арбитражные ситуации
+ * GET /api/odds-compare/movement/:id — история движения линий
  *
- * Endpoints:
- *  POST /api/telegram/setup          — сохранить token + chat_id, настроить webhook
- *  POST /api/telegram/send           — отправить произвольное сообщение
- *  POST /api/telegram/alert          — отправить форматированный алерт
- *  GET  /api/telegram/status         — статус бота и конфигурации
- *  POST /api/telegram/test           — тест-сообщение
- *  POST /api/telegram/webhook        — входящий вебхук от Telegram
- *
- * Алерты интегрированы с:
- *  • Value Finder  → сигнал при edge% > порога
- *  • Live Monitor  → in-play сигнал выше порога уверенности
- *  • CLV Tracker   → напоминание о pending closing odds
- *  • Neural        → точность модели изменилась
+ * Источники:
+ *  • Если задан ODDS_API_KEY → The Odds API (https://the-odds-api.com)
+ *  • Иначе → встроенные demo-данные (всё работает без ключа)
  */
 
 const express = require('express');
 const router  = express.Router();
 
-// ─── Config store (память; PostgreSQL при наличии) ────────────────────────
-let CFG = {
-  token:   process.env.TELEGRAM_BOT_TOKEN || '',
-  chatId:  process.env.TELEGRAM_CHAT_ID   || '',
-  enabled: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
-  webhookUrl: '',
-  alerts: {
-    valueEdge:    { enabled: true, minEdge: 5 },
-    liveSignal:   { enabled: true, minConf: 65 },
-    clvPending:   { enabled: true, hoursOld: 24 },
-    neuralRetrain:{ enabled: true },
-    oddsSpike:    { enabled: true, minDrop: 10 },
-  },
-};
+const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
 
-// Очередь сообщений для de-duplication (не спамим одинаковыми сигналами)
-const sentCache = new Map(); // key → timestamp
-const DEDUP_TTL = 60 * 60 * 1000; // 1 час
+// ─── Cache ────────────────────────────────────────────────────────────────
+let _cache = { fixtures: [], ts: 0 };
+const CACHE_TTL = 5 * 60 * 1000; // 5 минут
 
-// ─── Telegram API helpers ─────────────────────────────────────────────────
-function tgUrl(method) {
-  return `https://api.telegram.org/bot${CFG.token}/${method}`;
-}
+// ─── Demo data ────────────────────────────────────────────────────────────
+function demoFixtures() {
+  const now = Date.now();
+  const fwd = h => new Date(now + h * 3600000).toISOString();
 
-async function tgCall(method, body = {}) {
-  if (!CFG.token) throw new Error('Telegram token not configured');
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 10000);
-  try {
-    const r = await fetch(tgUrl(method), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    const d = await r.json();
-    if (!d.ok) throw new Error(d.description || 'Telegram API error');
-    return d.result;
-  } finally {
-    clearTimeout(t);
+  const BOOKMAKERS = ['pinnacle','bet365','betfair','unibet','williamhill','bwin','1xbet','betway'];
+
+  function generateOdds(baseH, baseD, baseA) {
+    const result = {};
+    for (const bm of BOOKMAKERS) {
+      const n = () => 1 + (Math.random() - 0.5) * 0.18;
+      const h = +(baseH * n()).toFixed(2);
+      const d = +(baseD * n()).toFixed(2);
+      const a = +(baseA * n()).toFixed(2);
+      // Pinnacle — самые острые линии (минимальная маржа)
+      const margin = bm === 'pinnacle' ? 1.035 : bm === 'betfair' ? 1.04 : 1.06 + Math.random() * 0.04;
+      const o25 = +(1.80 * n() * (margin / 1.05)).toFixed(2);
+      const u25 = +(2.05 * n() * (margin / 1.05)).toFixed(2);
+      result[bm] = { home: h, draw: d, away: a, over25: o25, under25: u25 };
+    }
+    return result;
   }
-}
 
-async function sendMessage(chatId, text, extra = {}) {
-  return tgCall('sendMessage', {
-    chat_id:    chatId || CFG.chatId,
-    text,
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    ...extra,
+  function detectArb(bookmakers) {
+    const bms = Object.entries(bookmakers);
+    let minSum = Infinity;
+    let bestLegs = [];
+
+    // 3-way arb: 1X2
+    const bestH = bms.reduce((b, [k,v]) => v.home > b.o ? { bm:k, o:v.home } : b, { bm:'', o:0 });
+    const bestD = bms.reduce((b, [k,v]) => v.draw > b.o ? { bm:k, o:v.draw } : b, { bm:'', o:0 });
+    const bestA = bms.reduce((b, [k,v]) => v.away > b.o ? { bm:k, o:v.away } : b, { bm:'', o:0 });
+
+    const sumInv = 1/bestH.o + 1/bestD.o + 1/bestA.o;
+    if (sumInv < 1) {
+      bestLegs = [
+        { outcome:'home', bm: bestH.bm, odds: bestH.o, stake: +(100 / bestH.o / sumInv).toFixed(2) },
+        { outcome:'draw', bm: bestD.bm, odds: bestD.o, stake: +(100 / bestD.o / sumInv).toFixed(2) },
+        { outcome:'away', bm: bestA.bm, odds: bestA.o, stake: +(100 / bestA.o / sumInv).toFixed(2) },
+      ];
+      return { possible: true, profit: +((1/sumInv - 1) * 100).toFixed(2), legs: bestLegs };
+    }
+    return { possible: false };
+  }
+
+  const fixtures = [
+    { id:'oc1', league:'Premier League', home:'Arsenal',       away:'Chelsea',        baseH:1.85, baseD:3.50, baseA:4.20, hours:2 },
+    { id:'oc2', league:'Premier League', home:'Liverpool',     away:'Man City',       baseH:2.20, baseD:3.30, baseA:3.20, hours:5 },
+    { id:'oc3', league:'La Liga',        home:'Real Madrid',   away:'Barcelona',      baseH:2.10, baseD:3.40, baseA:3.50, hours:6 },
+    { id:'oc4', league:'Bundesliga',     home:'Bayern Munich', away:'Dortmund',       baseH:1.55, baseD:4.20, baseA:6.50, hours:3 },
+    { id:'oc5', league:'Serie A',        home:'Inter Milan',   away:'AC Milan',       baseH:2.30, baseD:3.10, baseA:3.20, hours:8 },
+    { id:'oc6', league:'La Liga',        home:'Atletico',      away:'Sevilla',        baseH:1.90, baseD:3.40, baseA:4.10, hours:9 },
+    { id:'oc7', league:'Champions League', home:'PSG',         away:'Manchester City',baseH:2.60, baseD:3.20, baseA:2.80, hours:26 },
+    { id:'oc8', league:'Premier League', home:'Tottenham',     away:'Newcastle',      baseH:2.00, baseD:3.30, baseA:3.80, hours:4 },
+  ];
+
+  return fixtures.map(f => {
+    const bookmakers = generateOdds(f.baseH, f.baseD, f.baseA);
+    const arb        = detectArb(bookmakers);
+    return {
+      id:         f.id,
+      league:     f.league,
+      home:       f.home,
+      away:       f.away,
+      startTime:  fwd(f.hours),
+      status:     'scheduled',
+      bookmakers,
+      arb,
+      bestOdds: {
+        home: Math.max(...Object.values(bookmakers).map(b => b.home)),
+        draw: Math.max(...Object.values(bookmakers).map(b => b.draw)),
+        away: Math.max(...Object.values(bookmakers).map(b => b.away)),
+      },
+    };
   });
 }
 
-// ─── Message formatters ───────────────────────────────────────────────────
-function fmtValue(bet) {
-  return `💎 <b>VALUE BET SIGNAL</b>
-
-⚽ <b>${bet.match}</b>
-🏆 ${bet.league}
-📊 Рынок: <b>${bet.label}</b>
-📈 Коэффициент: <b>${bet.odds}</b>
-
-🔵 Implied: ${bet.impliedProb}%
-🟢 Model:   <b>${bet.modelProb}%</b>
-✅ Edge:    <b>+${bet.edge}%</b>
-📐 Kelly:   ${bet.kelly}%
-
-λ Хозяева: ${bet.lH || '?'} / Гости: ${bet.lA || '?'}
-🤖 Поisson+ELO Ensemble`;
-}
-
-function fmtLive(signal, matchName) {
-  const top = signal.topSignal;
-  if (!top) return null;
-  return `🔴 <b>IN-PLAY SIGNAL</b>
-
-⚽ <b>${matchName}</b>
-⏱ Минута: ${signal.minute}' | Счёт: ${signal.score}
-
-📣 ${top.label}
-💪 Уверенность: <b>${top.confidence.toFixed(0)}%</b>
-📊 Рынок: ${top.market}${top.odds ? ` @ <b>${(+top.odds).toFixed(2)}</b>` : ''}
-
-${top.rationale}
-
-⚡ Давление Д/Г: ${signal.pressureIndex?.home}/${signal.pressureIndex?.away}
-⚠️ Риск: ${signal.riskLevel === 'high' ? '🔴 Высокий' : signal.riskLevel === 'medium' ? '🟡 Средний' : '🟢 Низкий'}`;
-}
-
-function fmtOddsSpike(data) {
-  return `📉 <b>ODDS MOVEMENT ALERT</b>
-
-⚽ <b>${data.match}</b>
-📊 ${data.market}
-
-⬆️ Открытие:  <b>${data.openOdds}</b>
-⬇️ Сейчас:    <b>${data.currentOdds}</b>
-📉 Движение:  <b>${data.dropPct > 0 ? '+' : ''}${data.dropPct}%</b>
-
-${Math.abs(data.dropPct) >= 15 ? '🚨 Значительное движение — возможна инсайдерская информация!' : ''}`;
-}
-
-function fmtCLVReminder(bets) {
-  const list = bets.slice(0, 5).map(b =>
-    `• ${b.match_name || b.match} @ <b>${(+b.bet_odds).toFixed(2)}</b> (${(b.bet_date || '').slice(0, 10)})`
-  ).join('\n');
-  return `⏰ <b>CLV REMINDER</b>
-
-У тебя ${bets.length} ставок без closing odds:
-
-${list}${bets.length > 5 ? `\n...и ещё ${bets.length - 5}` : ''}
-
-Открой CLV Tracker → закрой ставки, пока помнишь!`;
-}
-
-function fmtNeural(data) {
-  return `🧠 <b>NEURAL RETRAIN COMPLETE</b>
-
-🏆 Спорт: <b>${data.sport}</b>
-📊 Точность: <b>${data.accuracy}%</b>
-📋 Обучено на: ${data.rowsUsed} матчах
-⏱ Время: ${new Date().toLocaleTimeString('ru')}
-
-${data.accuracy >= 70 ? '✅ Модель готова к использованию' : '⚠️ Точность ниже 70% — нужно больше данных'}`;
-}
-
-// ─── Dedup helper ─────────────────────────────────────────────────────────
-function shouldSend(key) {
-  const last = sentCache.get(key);
-  if (last && Date.now() - last < DEDUP_TTL) return false;
-  sentCache.set(key, Date.now());
-  return true;
-}
-
-// ─── Public API (вызывается из других модулей) ────────────────────────────
-const tgAPI = {
-  isEnabled() { return CFG.enabled && !!CFG.token && !!CFG.chatId; },
-
-  async sendValueAlert(bet) {
-    if (!this.isEnabled()) return;
-    if (!CFG.alerts.valueEdge.enabled) return;
-    if (bet.edge < CFG.alerts.valueEdge.minEdge) return;
-    const key = `value_${bet.match}_${bet.market}`;
-    if (!shouldSend(key)) return;
-    try {
-      await sendMessage(CFG.chatId, fmtValue(bet));
-      console.log(`[Telegram] Value alert sent: ${bet.match} +${bet.edge}%`);
-    } catch(e) { console.warn('[Telegram] value alert error:', e.message); }
-  },
-
-  async sendLiveSignal(signal, matchName) {
-    if (!this.isEnabled()) return;
-    if (!CFG.alerts.liveSignal.enabled) return;
-    if (!signal?.topSignal) return;
-    if (signal.topSignal.confidence < CFG.alerts.liveSignal.minConf) return;
-    const key = `live_${signal.matchId}_${signal.minute}`;
-    if (!shouldSend(key)) return;
-    const text = fmtLive(signal, matchName);
-    if (!text) return;
-    try {
-      await sendMessage(CFG.chatId, text);
-      console.log(`[Telegram] Live signal sent: ${matchName}`);
-    } catch(e) { console.warn('[Telegram] live signal error:', e.message); }
-  },
-
-  async sendOddsSpike(data) {
-    if (!this.isEnabled()) return;
-    if (!CFG.alerts.oddsSpike.enabled) return;
-    if (Math.abs(data.dropPct) < CFG.alerts.oddsSpike.minDrop) return;
-    const key = `odds_${data.match}_${Math.floor(Date.now() / 3600000)}`;
-    if (!shouldSend(key)) return;
-    try {
-      await sendMessage(CFG.chatId, fmtOddsSpike(data));
-    } catch(e) { console.warn('[Telegram] odds spike error:', e.message); }
-  },
-
-  async sendNeuralRetrain(data) {
-    if (!this.isEnabled()) return;
-    if (!CFG.alerts.neuralRetrain.enabled) return;
-    try {
-      await sendMessage(CFG.chatId, fmtNeural(data));
-    } catch(e) { console.warn('[Telegram] neural alert error:', e.message); }
-  },
-
-  async sendCLVReminder(bets) {
-    if (!this.isEnabled()) return;
-    if (!CFG.alerts.clvPending.enabled) return;
-    if (!bets?.length) return;
-    const key = `clv_reminder_${new Date().toDateString()}`;
-    if (!shouldSend(key)) return;
-    try {
-      await sendMessage(CFG.chatId, fmtCLVReminder(bets));
-    } catch(e) { console.warn('[Telegram] CLV reminder error:', e.message); }
-  },
-};
-
-// ─── Scheduled CLV reminder (раз в день) ─────────────────────────────────
-setInterval(async () => {
-  if (!tgAPI.isEnabled()) return;
-  const pgPool = global.__betquant_pg;
-  if (!pgPool) return;
+// ─── The Odds API integration ─────────────────────────────────────────────
+async function fetchFromOddsAPI() {
+  if (!ODDS_API_KEY) return null;
   try {
-    const r = await pgPool.query(
-      `SELECT * FROM clv_bets WHERE closing_odds IS NULL AND bet_date < NOW() - INTERVAL '${CFG.alerts.clvPending.hoursOld} hours' LIMIT 20`
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t    = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
+    const r    = await fetch(
+      `https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?apiKey=${ODDS_API_KEY}&regions=eu&markets=h2h,totals&oddsFormat=decimal`,
+      { signal: ctrl?.signal }
     );
-    if (r.rows.length) await tgAPI.sendCLVReminder(r.rows);
-  } catch(e) {}
-}, 24 * 60 * 60 * 1000);
+    if (t) clearTimeout(t);
+    if (!r.ok) throw new Error(`Odds API ${r.status}`);
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) return null;
+
+    return data.slice(0, 10).map((g, i) => {
+      const bookmakers = {};
+      for (const bm of (g.bookmakers || [])) {
+        const h2h     = bm.markets?.find(m => m.key === 'h2h');
+        const totals  = bm.markets?.find(m => m.key === 'totals');
+        if (!h2h) continue;
+        const home = h2h.outcomes.find(o => o.name === g.home_team)?.price || 0;
+        const away = h2h.outcomes.find(o => o.name === g.away_team)?.price || 0;
+        const draw = h2h.outcomes.find(o => o.name === 'Draw')?.price     || 0;
+        const over = totals?.outcomes.find(o => o.name === 'Over')?.price  || 0;
+        const under= totals?.outcomes.find(o => o.name === 'Under')?.price || 0;
+        bookmakers[bm.key] = { home, draw, away, over25: over, under25: under };
+      }
+      return {
+        id:        `api_${g.id}`,
+        league:    g.sport_title || 'Football',
+        home:      g.home_team,
+        away:      g.away_team,
+        startTime: g.commence_time,
+        status:    'scheduled',
+        bookmakers,
+        arb:       { possible: false },
+        bestOdds: {
+          home: Math.max(0, ...Object.values(bookmakers).map(b => b.home || 0)),
+          draw: Math.max(0, ...Object.values(bookmakers).map(b => b.draw || 0)),
+          away: Math.max(0, ...Object.values(bookmakers).map(b => b.away || 0)),
+        },
+      };
+    });
+  } catch(e) {
+    console.warn('[odds-compare] Odds API error:', e.message);
+    return null;
+  }
+}
+
+// ─── Refresh cache ────────────────────────────────────────────────────────
+async function getFixtures() {
+  if (Date.now() - _cache.ts < CACHE_TTL && _cache.fixtures.length) {
+    return _cache.fixtures;
+  }
+  const live = await fetchFromOddsAPI();
+  _cache.fixtures = live || demoFixtures();
+  _cache.ts       = Date.now();
+  return _cache.fixtures;
+}
 
 // ─── Routes ───────────────────────────────────────────────────────────────
 
-/** POST /api/telegram/setup */
-router.post('/setup', async (req, res) => {
-  const { token, chatId, webhookUrl, alerts } = req.body;
-  if (!token || !chatId) return res.status(400).json({ error: 'token and chatId required' });
-
-  CFG.token   = token;
-  CFG.chatId  = chatId;
-  CFG.enabled = true;
-  if (alerts) Object.assign(CFG.alerts, alerts);
-
-  // Persist to env-like store (если pgPool есть)
-  const pg = req.app.locals.pgPool;
-  if (pg) {
-    try {
-      await pg.query(
-        `INSERT INTO app_settings(key, value) VALUES('telegram_config', $1)
-         ON CONFLICT(key) DO UPDATE SET value=$1`,
-        [JSON.stringify({ token, chatId, alerts: CFG.alerts })]
-      );
-    } catch(e) { /* таблица может не существовать */ }
-  }
-
-  // Set webhook if URL provided
-  if (webhookUrl) {
-    try {
-      await tgCall('setWebhook', { url: `${webhookUrl}/api/telegram/webhook` });
-      CFG.webhookUrl = webhookUrl;
-    } catch(e) { return res.json({ ok: true, warning: `Webhook setup failed: ${e.message}` }); }
-  }
-
-  // Test connection
+/** GET /api/odds-compare/fixtures */
+router.get('/fixtures', async (req, res) => {
   try {
-    const me = await tgCall('getMe');
-    res.json({ ok: true, botName: me.username, chatId, webhookSet: !!webhookUrl });
-  } catch(e) {
-    CFG.enabled = false;
-    res.status(400).json({ error: 'Telegram connection failed: ' + e.message });
-  }
-});
-
-/** GET /api/telegram/status */
-router.get('/status', async (req, res) => {
-  const base = {
-    configured: !!CFG.token,
-    enabled:    CFG.enabled,
-    chatId:     CFG.chatId ? CFG.chatId.slice(0, 4) + '****' : null,
-    webhookUrl: CFG.webhookUrl || null,
-    alerts:     CFG.alerts,
-  };
-  if (!CFG.token) return res.json({ ...base, botName: null });
-  try {
-    const me = await tgCall('getMe');
-    res.json({ ...base, botName: me.username, botId: me.id });
-  } catch(e) {
-    res.json({ ...base, error: e.message });
-  }
-});
-
-/** POST /api/telegram/send — произвольное сообщение */
-router.post('/send', async (req, res) => {
-  const { text, chatId } = req.body;
-  if (!text) return res.status(400).json({ error: 'text required' });
-  if (!CFG.token) return res.status(400).json({ error: 'Telegram not configured' });
-  try {
-    const r = await sendMessage(chatId || CFG.chatId, text);
-    res.json({ ok: true, messageId: r.message_id });
+    const fixtures = await getFixtures();
+    const league   = req.query.league;
+    const list     = league ? fixtures.filter(f => f.league.toLowerCase().includes(league.toLowerCase())) : fixtures;
+    res.json({
+      fixtures:   list,
+      total:      list.length,
+      source:     ODDS_API_KEY ? 'the-odds-api' : 'demo',
+      lastUpdate: _cache.ts,
+    });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-/** POST /api/telegram/alert — форматированный алерт */
-router.post('/alert', async (req, res) => {
-  const { type, data } = req.body;
-  if (!type || !data) return res.status(400).json({ error: 'type and data required' });
-
+/** GET /api/odds-compare/fixture/:id */
+router.get('/fixture/:id', async (req, res) => {
   try {
-    switch (type) {
-      case 'value':   await tgAPI.sendValueAlert(data);          break;
-      case 'live':    await tgAPI.sendLiveSignal(data.signal, data.matchName); break;
-      case 'odds':    await tgAPI.sendOddsSpike(data);           break;
-      case 'neural':  await tgAPI.sendNeuralRetrain(data);       break;
-      case 'clv':     await tgAPI.sendCLVReminder(data.bets);    break;
-      default: return res.status(400).json({ error: `Unknown alert type: ${type}` });
+    const fixtures = await getFixtures();
+    const f = fixtures.find(x => x.id === req.params.id);
+    if (!f) return res.status(404).json({ error: 'Fixture not found' });
+    res.json(f);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** GET /api/odds-compare/arbitrage */
+router.get('/arbitrage', async (req, res) => {
+  try {
+    const fixtures = await getFixtures();
+    const opportunities = fixtures
+      .filter(f => f.arb?.possible)
+      .map(f => ({
+        id:        f.id,
+        league:    f.league,
+        match:     `${f.home} vs ${f.away}`,
+        startTime: f.startTime,
+        profit:    f.arb.profit,
+        legs:      f.arb.legs || [],
+      }));
+    res.json({ opportunities, total: opportunities.length });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** GET /api/odds-compare/movement/:id */
+router.get('/movement/:id', async (req, res) => {
+  try {
+    const fixtures = await getFixtures();
+    const f = fixtures.find(x => x.id === req.params.id);
+    if (!f) return res.status(404).json({ error: 'Fixture not found' });
+
+    // Генерируем демо-историю движения линий (реальная — из Odds API с timestamps)
+    const start     = new Date(f.startTime).getTime();
+    const now       = Date.now();
+    const hoursLeft = (start - now) / 3600000;
+    const points    = [];
+
+    for (let h = Math.min(48, Math.ceil(hoursLeft + 4)); h >= 0; h -= 3) {
+      const drift = (Math.random() - 0.5) * 0.12;
+      points.push({
+        t:    new Date(start - h * 3600000).toISOString(),
+        home: Math.max(1.01, +(f.bestOdds.home + drift).toFixed(2)),
+        draw: Math.max(1.01, +(f.bestOdds.draw - drift * 0.5).toFixed(2)),
+        away: Math.max(1.01, +(f.bestOdds.away - drift).toFixed(2)),
+      });
     }
-    res.json({ ok: true });
+
+    res.json({ fixtureId: f.id, match: `${f.home} vs ${f.away}`, history: points });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-/** POST /api/telegram/test */
-router.post('/test', async (req, res) => {
-  if (!CFG.token || !CFG.chatId)
-    return res.status(400).json({ error: 'Configure Telegram first (token + chatId)' });
-  try {
-    await sendMessage(CFG.chatId,
-      `✅ <b>BetQuant Pro</b> — тест успешен!\n\nВремя: ${new Date().toLocaleString('ru')}\n\nАлерты настроены и работают 🎯`
-    );
-    res.json({ ok: true });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-/** PATCH /api/telegram/alerts — обновить настройки алертов */
-router.patch('/alerts', (req, res) => {
-  const { alerts } = req.body;
-  if (alerts) {
-    for (const [key, val] of Object.entries(alerts)) {
-      if (CFG.alerts[key]) Object.assign(CFG.alerts[key], val);
-    }
-  }
-  res.json({ ok: true, alerts: CFG.alerts });
-});
-
-/** POST /api/telegram/webhook — Telegram Webhook endpoint */
-router.post('/webhook', express.json(), async (req, res) => {
-  res.sendStatus(200); // Всегда 200 сразу
-
-  const upd = req.body;
-  const msg = upd?.message;
-  if (!msg?.text) return;
-
-  const chatId = msg.chat.id;
-  const text   = msg.text.trim().toLowerCase();
-
-  const cmd = async (reply) => {
-    try { await sendMessage(chatId, reply); } catch(e) {}
-  };
-
-  if (text === '/start' || text === '/help') {
-    await cmd(`🎯 <b>BetQuant Pro Bot</b>
-
-Доступные команды:
-/status — статус платформы
-/value  — последние value ставки
-/live   — активные матчи
-/clv    — CLV статистика
-/help   — эта справка`);
-  } else if (text === '/status') {
-    await cmd(`✅ BetQuant Pro работает\n⏱ ${new Date().toLocaleString('ru')}`);
-  } else if (text === '/value') {
-    await cmd('💎 Открой Value Finder в приложении: /app#value');
-  } else if (text === '/live') {
-    await cmd('🔴 Открой Live Monitor в приложении: /app#live');
-  } else if (text === '/clv') {
-    await cmd('📐 Открой CLV Tracker в приложении: /app#clv');
-  }
-});
-
-module.exports = { router, tgAPI };
+module.exports = router;
