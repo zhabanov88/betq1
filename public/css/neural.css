@@ -1,0 +1,386 @@
+/* ═══════════════════════════════════════════════════════════════════
+   BetQuant Neural Networks — Panel Styles
+   Тёмная тема, минималистичная + data-dense
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Layout ──────────────────────────────────────────────────────── */
+#panel-neural {
+  padding: 0 0 40px;
+}
+
+.nn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid rgba(129,140,248,0.15);
+}
+
+.nn-header-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: -0.3px;
+}
+
+.nn-header-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.nn-header-actions { display: flex; gap: 8px; }
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+.nn-btn {
+  background: rgba(129,140,248,0.12);
+  border: 1px solid rgba(129,140,248,0.25);
+  color: #818cf8;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.nn-btn:hover { background: rgba(129,140,248,0.22); border-color: #818cf8; }
+.nn-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.nn-btn.primary { background: #818cf8; color: #0f172a; border-color: #818cf8; }
+.nn-btn.primary:hover { background: #a5b4fc; }
+.nn-btn.sm  { padding: 5px 10px; font-size: 12px; }
+.nn-btn.xs  { padding: 3px 8px;  font-size: 11px; }
+.nn-btn.green { background: rgba(74,222,128,0.12); color: #4ade80; border-color: rgba(74,222,128,0.3); }
+.nn-btn.green:hover { background: rgba(74,222,128,0.22); }
+
+/* ── Status grid ─────────────────────────────────────────────────── */
+#nn-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 20px 28px;
+}
+
+.nn-status-card {
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(100,116,139,0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.nn-status-card:hover { border-color: rgba(129,140,248,0.4); background: rgba(129,140,248,0.05); }
+.nn-status-card.trained { border-color: rgba(74,222,128,0.2); }
+
+.nn-status-icon { font-size: 26px; line-height: 1; }
+
+.nn-status-info { flex: 1; }
+.nn-status-name { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 6px; }
+.nn-status-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+
+.nn-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.nn-badge.green  { background: rgba(74,222,128,0.15);  color: #4ade80;  }
+.nn-badge.blue   { background: rgba(129,140,248,0.15); color: #818cf8;  }
+.nn-badge.grey   { background: rgba(100,116,139,0.15); color: #94a3b8;  }
+.nn-badge.red    { background: rgba(248,113,113,0.15); color: #f87171;  }
+
+.nn-loss-mini { margin-top: 4px; }
+.nn-status-actions { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Sport tabs ──────────────────────────────────────────────────── */
+#nn-sport-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 28px 16px;
+  border-bottom: 1px solid rgba(100,116,139,0.15);
+  flex-wrap: wrap;
+}
+
+.nn-tab {
+  background: rgba(15,23,42,0.5);
+  border: 1px solid rgba(100,116,139,0.2);
+  color: #64748b;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.nn-tab:hover { color: #94a3b8; border-color: rgba(100,116,139,0.4); }
+.nn-tab.nn-tab-active {
+  background: rgba(129,140,248,0.15);
+  border-color: #818cf8;
+  color: #818cf8;
+}
+
+/* ── Section wrapper ─────────────────────────────────────────────── */
+.nn-content {
+  padding: 20px 28px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 900px) { .nn-content { grid-template-columns: 1fr; } }
+
+/* ── Weights panel ───────────────────────────────────────────────── */
+.nn-weights-header {
+  margin-bottom: 16px;
+}
+.nn-weights-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.nn-arch {
+  font-size: 11px;
+  color: #64748b;
+  font-family: monospace;
+  margin-top: 4px;
+}
+
+.nn-weights-layout {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 16px;
+}
+.nn-full-width { grid-column: 1 / -1; }
+
+.nn-section {
+  background: rgba(15,23,42,0.5);
+  border: 1px solid rgba(100,116,139,0.15);
+  border-radius: 8px;
+  padding: 14px;
+}
+.nn-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 4px;
+}
+.nn-section-sub {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+/* Feature list */
+.nn-feature-list { display: flex; flex-direction: column; gap: 6px; }
+
+.nn-feature-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 120px 52px;
+  align-items: center;
+  gap: 8px;
+}
+.nn-feature-rank { font-size: 11px; color: #475569; font-weight: 700; }
+.nn-feature-label { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.nn-feature-name { font-size: 12px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nn-feature-val  { font-size: 11px; color: #64748b; font-family: monospace; text-align: right; }
+
+.nn-feature-group {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nn-feature-bar-wrap { background: rgba(100,116,139,0.12); border-radius: 3px; height: 6px; overflow: hidden; }
+.nn-feature-bar      { height: 6px; border-radius: 3px; transition: width .4s ease; }
+
+/* Groups */
+.nn-groups { display: flex; flex-direction: column; gap: 8px; }
+.nn-group-item { display: grid; grid-template-columns: 72px 1fr 50px; align-items: center; gap: 8px; }
+.nn-group-name { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-align: center; }
+.nn-group-bar-wrap { background: rgba(100,116,139,0.12); border-radius: 3px; height: 8px; overflow: hidden; }
+.nn-group-bar-fill { height: 8px; border-radius: 3px; transition: width .5s ease; }
+.nn-group-total { font-size: 11px; color: #64748b; font-family: monospace; }
+
+/* Group colours */
+.nn-group-attack, .nn-group-bar-attack   { background: rgba(248,113,113,0.2); color: #f87171; }
+.nn-group-bar-attack                     { background: #f87171; }
+.nn-group-defense, .nn-group-bar-defense { background: rgba(129,140,248,0.2); color: #818cf8; }
+.nn-group-bar-defense                    { background: #818cf8; }
+.nn-group-market, .nn-group-bar-market   { background: rgba(245,158,11,0.2);  color: #f59e0b; }
+.nn-group-bar-market                     { background: #f59e0b; }
+.nn-group-puck, .nn-group-offense,
+.nn-group-bar-puck, .nn-group-bar-offense { background: rgba(34,211,238,0.2); color: #22d3ee; }
+.nn-group-bar-puck, .nn-group-bar-offense { background: #22d3ee; }
+.nn-group-pressure, .nn-group-bar-pressure{ background: rgba(74,222,128,0.2);  color: #4ade80; }
+.nn-group-bar-pressure                   { background: #4ade80; }
+.nn-group-special, .nn-group-bar-special { background: rgba(167,139,250,0.2); color: #a78bfa; }
+.nn-group-bar-special                    { background: #a78bfa; }
+.nn-group-cards, .nn-group-penalty,
+.nn-group-bar-cards, .nn-group-bar-penalty{ background: rgba(251,191,36,0.2); color: #fbbf24; }
+.nn-group-bar-cards, .nn-group-bar-penalty{ background: #fbbf24; }
+.nn-group-serve, .nn-group-bar-serve     { background: rgba(52,211,153,0.2);  color: #34d399; }
+.nn-group-bar-serve                      { background: #34d399; }
+.nn-group-rally, .nn-group-bar-rally     { background: rgba(249,115,22,0.2);  color: #f97316; }
+.nn-group-bar-rally                      { background: #f97316; }
+.nn-group-rank, .nn-group-bar-rank       { background: rgba(156,163,175,0.2); color: #9ca3af; }
+.nn-group-bar-rank                       { background: #9ca3af; }
+.nn-group-goalie, .nn-group-bar-goalie   { background: rgba(99,102,241,0.2);  color: #6366f1; }
+.nn-group-bar-goalie                     { background: #6366f1; }
+.nn-group-boards, .nn-group-bar-boards   { background: rgba(236,72,153,0.2);  color: #ec4899; }
+.nn-group-bar-boards                     { background: #ec4899; }
+.nn-group-result, .nn-group-bar-result   { background: rgba(100,116,139,0.2); color: #64748b; }
+.nn-group-bar-result                     { background: #64748b; }
+
+/* Targets grid */
+.nn-targets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.nn-target-card {
+  background: rgba(15,23,42,0.7);
+  border: 1px solid rgba(100,116,139,0.18);
+  border-radius: 7px;
+  padding: 12px;
+}
+.nn-target-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #818cf8;
+  margin-bottom: 7px;
+}
+.nn-target-features {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.nn-target-explanation {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+/* Feature pills */
+.nn-feat-pill {
+  background: rgba(129,140,248,0.12);
+  border: 1px solid rgba(129,140,248,0.2);
+  color: #818cf8;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nn-feat-pill.sm { font-size: 10px; padding: 1px 5px; }
+
+/* ── Strategies ──────────────────────────────────────────────────── */
+.nn-strat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.nn-strat-title { font-size: 15px; font-weight: 700; color: #e2e8f0; }
+
+.nn-strat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.nn-strat-card {
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(100,116,139,0.18);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color .2s;
+}
+.nn-strat-card:hover { border-color: rgba(129,140,248,0.35); }
+.nn-strat-card.nn-type-neural_combined { border-color: rgba(74,222,128,0.2); }
+
+.nn-strat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.nn-strat-name { font-size: 13px; font-weight: 700; color: #e2e8f0; }
+.nn-strat-roi  { font-size: 12px; font-weight: 700; color: #4ade80; white-space: nowrap; }
+
+.nn-strat-condition { font-size: 11px; color: #94a3b8; padding: 5px 8px; background: rgba(100,116,139,0.1); border-radius: 5px; }
+.nn-strat-features  { font-size: 11px; color: #64748b; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.nn-strat-explanation { font-size: 11px; color: #94a3b8; line-height: 1.55; }
+
+.nn-strat-nonstd {
+  font-size: 11px;
+  color: #cbd5e1;
+  background: rgba(245,158,11,0.07);
+  border: 1px solid rgba(245,158,11,0.15);
+  border-radius: 6px;
+  padding: 7px 9px;
+  line-height: 1.5;
+}
+.nn-nonstd-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+}
+
+.nn-strat-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.nn-conf-wrap { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; }
+.nn-conf-bar  { width: 70px; height: 5px; background: rgba(100,116,139,0.2); border-radius: 3px; overflow: hidden; }
+.nn-conf-fill { height: 5px; border-radius: 3px; background: linear-gradient(90deg, #818cf8, #4ade80); }
+
+/* ── Not trained / empty states ──────────────────────────────────── */
+.nn-not-trained {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+.nn-not-trained-icon { font-size: 40px; }
+
+.nn-empty {
+  padding: 30px;
+  text-align: center;
+  color: #475569;
+  font-size: 13px;
+}
+
+/* ── Architecture canvas ─────────────────────────────────────────── */
+#nn-arch-canvas {
+  display: block;
+  background: rgba(15,23,42,0.5);
+  border-radius: 6px;
+  width: 100%;
+  max-width: 700px;
+}

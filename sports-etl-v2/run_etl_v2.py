@@ -28,7 +28,7 @@ import sys
 import time
 from datetime import datetime
 
-import requests
+import requests, os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -274,6 +274,25 @@ def main():
     log.info(f"║  Total time: {total_time/60:.1f} minutes                              ║")
     log.info("╚══════════════════════════════════════════════════════════╝")
 
+
+    def trigger_retrain(table: str, host: str = 'http://localhost:3000'):
+        """Триггер переобучения нейросети после загрузки данных"""
+        try:
+            r = requests.post(
+                f'{host}/api/neural/auto-retrain',
+                json={'table': table},
+                timeout=120  # обучение может занять до 2 мин
+            )
+            data = r.json()
+            if data.get('ok'):
+                print(f'✅ Neural retrained for {table}: accuracy {data.get("accuracy")}%')
+            else:
+                print(f'⚠️  Neural retrain skipped: {data.get("message")}')
+        except Exception as e:
+            print(f'⚠️  Neural retrain failed: {e}')
+
+    # Вызов в конце ETL:
+    trigger_retrain('football_matches')
 
 if __name__ == '__main__':
     main()

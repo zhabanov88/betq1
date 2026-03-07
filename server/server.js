@@ -6,6 +6,8 @@ const session = require('express-session');
 const path = require('path');
 const vm = require('vm');
 
+const neuralRoutes = require('./neural');
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
@@ -38,12 +40,17 @@ try {
     password: process.env.CH_PASSWORD || '',
     database: process.env.CH_DATABASE || 'betquant'
   });
+
 } catch(e) { console.warn('ClickHouse not configured'); }
+
+app.locals.clickhouse = clickhouse;
 
 function requireAuth(req, res, next) {
   if (req.session?.userId || req.session?.demo) return next();
   res.status(401).json({ error: 'Unauthorized' });
 }
+
+app.use('/api/neural', neuralRoutes);
 
 // ── AUTH ──
 app.post('/api/auth/register', async (req, res) => {
