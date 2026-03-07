@@ -103,25 +103,6 @@ app.use('/api/live',  liveRoutes);
 app.use('/api/value', valueRoutes);
 app.use('/api/clv',   clvRoutes);
 
-// ── Priority 2 routes ────────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════
-// ЗАМЕНИТЕ этот блок в server/index.js (найдите по "Priority 2")
-// ═══════════════════════════════════════════════════════════════
-
-// ── Neural Networks ────────────────────────────────────────────────────────
-app.locals.clickhouse = clickhouse;
-const neuralRoutes = require('./neural');
-app.use('/api/neural', neuralRoutes);
-
-// ── Priority 1: Live Monitor, Value Finder, CLV ────────────────────────────
-app.locals.pgPool = pgPool;
-
-const liveRoutes  = require('./live');
-const valueRoutes = require('./value');
-const clvRoutes   = require('./clv');
-app.use('/api/live',  liveRoutes);
-app.use('/api/value', valueRoutes);
-app.use('/api/clv',   clvRoutes);
 
 // ── Priority 2: Telegram, Odds Compare ───────────────────────────────────
 // ВАЖНО: telegram лежит в server/telegram.js (НЕ routes/telegram.js!)
