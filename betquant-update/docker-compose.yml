@@ -1,0 +1,167 @@
+version: '3.9'
+
+services:
+
+  # ───────── BetQuant App ─────────
+  app:
+    build: .
+    container_name: betquant-app
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      SESSION_SECRET: betquant-secret-change-in-production
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: betquant
+      PG_USER: betquant
+      PG_PASSWORD: betquant123
+      CH_HOST: http://clickhouse:8123
+      CH_USER: default
+      CH_PASSWORD: ""
+      CH_DATABASE: betquant
+      ANTHROPIC_API_KEY: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks: [bq]
+
+  # ───────── PostgreSQL ─────────
+  # init-scripts/01_init_postgres.sql выполняется автоматически при первом старте
+  postgres:
+    image: postgres:16-alpine
+    container_name: betquant-pg
+    environment:
+      POSTGRES_DB: betquant
+      POSTGRES_USER: betquant
+      POSTGRES_PASSWORD: betquant123
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./init-scripts/01_init_postgres.sql:/docker-entrypoint-initdb.d/01_init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U betquant -d betquant"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [bq]
+
+  # ───────── ClickHouse ─────────
+  # Внимание: ClickHouse НЕ выполняет .sql из /docker-entrypoint-initdb.d/ автоматически.
+  # Инициализация схемы делается отдельным сервисом clickhouse-init (см. ниже).
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: betquant-ch
+    environment:
+      CLICKHOUSE_DB: betquant
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - ch-data:/var/lib/clickhouse
+      - ch-logs:/var/log/clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    networks: [bq]
+
+  # ───────── ClickHouse Schema Init ─────────
+  # Запускается один раз после того как ClickHouse стал healthy.
+  # Создаёт БД и все таблицы. После завершается (exit 0).
+  clickhouse-init:
+    image: clickhouse/clickhouse-client:24.3
+    container_name: betquant-ch-init
+    volumes:
+      - ./init-scripts/02_init_clickhouse.sh:/init.sh
+      - ./init-scripts/02_init_clickhouse.sql:/init_legacy.sql
+      - ./init-scripts/02_init_clickhouse_extended.sql:/init_extended.sql
+    entrypoint: ["sh", "/init.sh"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+    networks: [bq]
+
+  # ─────────── ETL Data Collector ───────────
+  # Загружает реальные данные в ClickHouse.
+  # Запуск: docker compose --profile etl run --rm etl
+  # или: docker compose --profile etl up etl
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: betquant-etl
+    environment:
+      CH_HOST: http://clickhouse:8123
+      CH_DB: betquant
+      CH_USER: default
+      CH_PASS: ""
+      ETL_SEASONS: "3"
+      ETL_LEAGUES: top
+    volumes:
+      - etl-cache:/opt/etl-cache
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+    restart: "no"
+    profiles: ["etl"]
+    networks: [bq]
+
+  # ───────── Redis ─────────
+  redis:
+    image: redis:7-alpine
+    container_name: betquant-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: [bq]
+
+  # ───────── Nginx ─────────
+  nginx:
+    image: nginx:alpine
+    container_name: betquant-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks: [bq]
+
+volumes:
+  pg-data:
+  ch-data:
+  ch-logs:
+  redis-data:
+  etl-cache:
+
+networks:
+  bq:
+    driver: bridge

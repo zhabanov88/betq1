@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+LABEL description="BetQuant ETL — Data Population Service"
+
+# Зависимости
+RUN pip install --no-cache-dir \
+    requests \
+    beautifulsoup4 \
+    lxml \
+    aiohttp \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/etl
+
+# Копируем ETL скрипты
+COPY betquant-etl/ ./
+
+RUN chmod +x deploy_and_run.sh
+
+# По умолчанию запускаем full ETL
+CMD ["python3", "run_etl.py", \
+     "--ch-host", "http://clickhouse:8123", \
+     "--ch-db",   "betquant", \
+     "--ch-user", "default", \
+     "--seasons", "3"]
