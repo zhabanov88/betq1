@@ -210,6 +210,8 @@ function inPlaySignal(m) {
     });
 
   signals.sort((a, b) => b.confidence - a.confidence);
+
+  
   return {
     matchId: m.id, minute: min,
     score: `${hG}:${aG}`,

@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="/css/neural.css">
     <link rel="stylesheet" href="/css/live-value-clv.css">
+    <link rel="stylesheet" href="/css/priority2.css">
+    <link rel="stylesheet" href="/css/telegram.css">
 </head>
 <body class="dark-mode">
 <div id="loginScreen" class="login-screen">
@@ -66,10 +68,29 @@
             <button class="sidebar-btn" data-panel="live" onclick="app.showPanel('live')">
                 <span class="sidebar-icon">🔴</span> Live Monitor
                 <span class="lm-badge" style="display:none"></span>
-              </button>
-              <button class="sidebar-btn" data-panel="clv" onclick="app.showPanel('clv')">
+            </button>
+            <button class="sidebar-btn" data-panel="clv" onclick="app.showPanel('clv')">
                 <span class="sidebar-icon">📐</span> CLV Tracker
-              </button>
+            </button>
+              <!-- ELO Ratings -->
+            <button class="sidebar-btn" data-panel="elo" onclick="app.showPanel('elo')">
+                <span class="sidebar-icon">⚡</span> ELO Ratings
+            </button>
+            
+            <!-- Odds Compare -->
+            <button class="sidebar-btn" data-panel="oc" onclick="app.showPanel('oc')">
+                <span class="sidebar-icon">📊</span> Odds Compare
+            </button>
+            
+            <!-- Bankroll -->
+            <button class="sidebar-btn" data-panel="bankroll" onclick="app.showPanel('bankroll')">
+                <span class="sidebar-icon">💰</span> Bankroll
+            </button>
+            
+            <!-- Telegram (можно в секцию SETTINGS) -->
+            <button class="sidebar-btn" data-panel="telegram" onclick="app.showPanel('telegram')">
+                <span class="sidebar-icon">📱</span> Telegram
+            </button>
         </div>
         <div class="sidebar-section">
             <div class="sidebar-label">BACKTEST</div>
@@ -692,6 +713,75 @@
             </div>
             </div>
         </div>
+
+        <div class="panel" id="panel-elo" style="display:none">
+            <div class="p2-panel-head">
+                <h2>⚡ ELO Ratings</h2>
+                <div id="elo-loading"><span class="spinner"></span> Загрузка...</div>
+            </div>
+            <div id="elo-controls" style="margin-bottom:12px"></div>
+            
+            <!-- Table view -->
+            <div id="elo-table-wrap" style="overflow-x:auto">
+                <table class="data-table" id="elo-table">
+                <thead><tr><th>#</th><th>Команда</th><th>ELO</th><th>Сила</th><th></th></tr></thead>
+                <tbody id="elo-body"></tbody>
+                </table>
+            </div>
+            
+            <!-- Chart view -->
+            <div id="elo-chart-wrap" style="display:none;position:relative;height:420px">
+                <canvas id="elo-chart-canvas"></canvas>
+            </div>
+            
+            <!-- Signals view -->
+            <div id="elo-signals" style="display:none"></div>
+        </div>
+
+        <div class="panel" id="panel-oc" style="display:none">
+            <div class="p2-panel-head">
+                <h2>📊 Odds Compare</h2>
+                <div id="oc-loading"><span class="spinner"></span> Загрузка...</div>
+            </div>
+            <div id="oc-tabs" style="margin-bottom:12px"></div>
+            <div id="oc-content"></div>
+            <div id="oc-detail"></div>
+        </div>
+        <div class="panel" id="panel-bankroll" style="display:none">
+            <div class="p2-panel-head">
+                <h2>💰 Bankroll Manager</h2>
+                <button class="ctrl-btn primary" onclick="bankrollManager.openBetModal()">+ Записать ставку</button>
+            </div>
+            
+            <div id="bm-stopLossAlert">
+                <h3>🛑 СТОП-ЛОСС АКТИВИРОВАН</h3>
+                <p>Ваш банк достиг уровня стоп-лосса. Торговля приостановлена.</p>
+                <button class="ctrl-btn" onclick="bankrollManager.resetStopLoss()">Сбросить стоп-лосс</button>
+            </div>
+            
+            <div class="p2-two-col">
+                <div id="bm-left">
+                <div id="bm-config"></div>
+                </div>
+                <div id="bm-right">
+                <div id="bm-kpis"></div>
+                <div class="config-section">
+                    <div class="lm-sec-title">📈 Динамика банка</div>
+                    <div id="bm-equity-chart-wrap"><canvas id="bm-equity-chart"></canvas></div>
+                </div>
+                <div class="config-section">
+                    <div class="lm-sec-title">📋 История ставок</div>
+                    <div id="bm-history"></div>
+                </div>
+                </div>
+            </div>
+        </div>
+        <div class="panel" id="panel-telegram" style="display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+                <h2 style="font-size:18px;font-weight:700;margin:0">📱 Telegram Notifications</h2>
+            </div>
+            <div id="tg-panel"></div>
+        </div>
     </main>
 </div>
 <!-- Modals -->
@@ -812,5 +902,9 @@
 <script src="/js/live-monitor.js"></script>
 <script src="/js/value-finder.js"></script>
 <script src="/js/clv-tracker.js"></script>
+<script src="/js/elo.js"></script>
+<script src="/js/odds-compare.js"></script>
+<script src="/js/bankroll.js"></script>
+<script src="/js/telegram-settings.js"></script>
 </body>
 </html>

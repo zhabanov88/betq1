@@ -82,6 +82,57 @@ CREATE TABLE IF NOT EXISTS clv_bets (
 );
 CREATE INDEX IF NOT EXISTS clv_bets_date_idx ON clv_bets(bet_date DESC);
 
+-- Telegram Bots
+CREATE TABLE IF NOT EXISTS tg_bots (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  token TEXT NOT NULL,
+  bot_name VARCHAR(100),
+  is_default BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Recipients
+CREATE TABLE IF NOT EXISTS tg_recipients (
+  id VARCHAR(64) PRIMARY KEY,
+  label VARCHAR(200) NOT NULL,
+  chat_id VARCHAR(100) NOT NULL,
+  tags TEXT[] DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Distributions
+CREATE TABLE IF NOT EXISTS tg_distributions (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  bot_id VARCHAR(64) REFERENCES tg_bots(id) ON DELETE SET NULL,
+  recipient_ids TEXT[] DEFAULT '{}',
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Strategy Configs
+CREATE TABLE IF NOT EXISTS tg_strategy_configs (
+  strategy_id VARCHAR(100) PRIMARY KEY,
+  distribution_id VARCHAR(64),
+  bot_id VARCHAR(64),
+  format_id VARCHAR(64),
+  enabled BOOLEAN DEFAULT TRUE,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Message Formats
+CREATE TABLE IF NOT EXISTS tg_formats (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  template TEXT NOT NULL,
+  type VARCHAR(50) DEFAULT 'any',
+  is_default BOOLEAN DEFAULT FALSE,
+  fields TEXT[] DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, email, role) 
 VALUES ('admin', '$2b$10$rQZ9K1mN2vX4yL6wH8pJ5eBfDgCsIt7oMrAkPuWnYxV3TqEj0.hei', 'admin@betquant.pro', 'admin')

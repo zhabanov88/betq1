@@ -227,6 +227,16 @@ router.get('/scan', async (req, res) => {
   const bets = findValue(fixtures, minEdge);
   res.json({ bets, total: bets.length, models: ['Poisson (Dixon-Coles)', 'ELO', 'Ensemble 70/30'],
              source: clickhouse ? 'clickhouse+model' : 'demo+model' });
+
+  const tg = global.__betquant_tg;
+  if (tg) {
+    for (const bet of valueBets) {
+      if (bet.edge >= 5) {
+        // strategyId берётся из запроса или из bet.strategyId
+        await tg.sendValueAlert(bet, req.query.strategyId).catch(()=>{});
+      }
+    }
+  }
 });
 
 router.post('/calculate', (req, res) => {

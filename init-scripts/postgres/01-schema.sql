@@ -352,3 +352,54 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 
 CREATE TRIGGER update_strategies_updated_at BEFORE UPDATE ON strategies
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+    -- Telegram Bots
+CREATE TABLE IF NOT EXISTS tg_bots (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  token TEXT NOT NULL,
+  bot_name VARCHAR(100),
+  is_default BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Recipients
+CREATE TABLE IF NOT EXISTS tg_recipients (
+  id VARCHAR(64) PRIMARY KEY,
+  label VARCHAR(200) NOT NULL,
+  chat_id VARCHAR(100) NOT NULL,
+  tags TEXT[] DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Distributions
+CREATE TABLE IF NOT EXISTS tg_distributions (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  bot_id VARCHAR(64) REFERENCES tg_bots(id) ON DELETE SET NULL,
+  recipient_ids TEXT[] DEFAULT '{}',
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Strategy Configs
+CREATE TABLE IF NOT EXISTS tg_strategy_configs (
+  strategy_id VARCHAR(100) PRIMARY KEY,
+  distribution_id VARCHAR(64),
+  bot_id VARCHAR(64),
+  format_id VARCHAR(64),
+  enabled BOOLEAN DEFAULT TRUE,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Telegram Message Formats
+CREATE TABLE IF NOT EXISTS tg_formats (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  template TEXT NOT NULL,
+  type VARCHAR(50) DEFAULT 'any',
+  is_default BOOLEAN DEFAULT FALSE,
+  fields TEXT[] DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

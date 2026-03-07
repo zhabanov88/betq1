@@ -106,6 +106,10 @@ const app = {
     }
     if (name === 'live' && typeof liveMonitor !== 'undefined') liveMonitor.init();
     if (name === 'clv'  && typeof clvTracker  !== 'undefined') clvTracker.init();
+    if (name === 'elo'      && typeof eloPanel          !== 'undefined') eloPanel.init();
+    if (name === 'oc'       && typeof oddsCompare        !== 'undefined') oddsCompare.init();
+    if (name === 'bankroll' && typeof bankrollManager    !== 'undefined') bankrollManager.init();
+    if (name === 'telegram' && typeof telegramSettings   !== 'undefined') telegramSettings.init();
   },
   
   setSport(sport) {

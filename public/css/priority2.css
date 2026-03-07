@@ -1,0 +1,191 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   BetQuant Pro — Priority 2 Styles
+   ELO · Odds Compare · Bankroll Manager · Telegram Settings
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── ELO Panel ────────────────────────────────────────────────────────────── */
+#panel-elo .panel-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+#elo-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+.elo-bar-wrap { width:100px; height:6px; background:var(--bg3); border-radius:3px; overflow:hidden; }
+.elo-bar { height:100%; background:linear-gradient(90deg, #00d4ff, #c084fc); border-radius:3px; transition:width .4s; }
+
+.elo-signal-card {
+  background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+  padding:14px; margin-bottom:10px;
+}
+.elo-sig-head  { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.elo-sig-match { font-weight:600; font-size:14px; }
+.elo-sig-body  { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.elo-sig-block { flex:1; text-align:center; background:var(--bg3); border-radius:8px; padding:8px; }
+.elo-sig-label { font-size:10px; color:var(--text3); display:block; }
+.elo-sig-val   { font-size:13px; font-weight:600; display:block; }
+.elo-sig-elo   { font-size:11px; color:var(--accent); display:block; margin-top:2px; }
+.elo-sig-vs    { color:var(--text3); font-size:12px; flex-shrink:0; }
+.elo-sig-probs { font-size:12px; }
+.elo-prob-row  { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+.elo-bet-hint  {
+  background:rgba(0,230,118,.1); border:1px solid rgba(0,230,118,.3);
+  border-radius:6px; padding:8px 12px; font-size:12px; margin-top:6px;
+}
+.elo-matchup-result { padding:8px 0; }
+
+/* ── Odds Compare Panel ───────────────────────────────────────────────────── */
+#panel-oc { display:flex; flex-direction:column; gap:0; }
+#oc-tabs  { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+
+.oc-grid  { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+
+.oc-card {
+  background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+  padding:12px; cursor:pointer; transition:border-color .2s, transform .15s;
+}
+.oc-card:hover   { border-color:var(--accent); transform:translateY(-1px); }
+.oc-card.selected { border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,212,255,.2); }
+
+.oc-card-head  { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+.oc-time       { font-size:11px; color:var(--text3); margin-left:auto; }
+.oc-match-name { font-size:14px; font-weight:600; display:flex; align-items:center; }
+.oc-team       { max-width:110px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.oc-best-row   { display:flex; gap:6px; margin-top:10px; }
+.oc-best-cell  { flex:1; text-align:center; background:var(--bg3); border-radius:6px; padding:6px 4px; }
+.oc-best-cell-hi { background:rgba(0,230,118,.15) !important; }
+.oc-mkt-label  { font-size:10px; color:var(--text3); display:block; }
+.oc-best-odds  { font-size:15px; font-weight:700; color:var(--accent); display:block; }
+.oc-bm-label   { font-size:10px; color:var(--text3); display:block; }
+.oc-spread     { font-size:10px; display:block; margin-top:2px; }
+.oc-bm-icon    { margin-right:4px; }
+.oc-sharp-tag  {
+  display:inline-block; font-size:9px; background:rgba(0,212,255,.2);
+  color:var(--accent); border-radius:3px; padding:1px 4px; margin-left:4px;
+}
+.oc-arb-badge  {
+  display:inline-block; font-size:11px; background:rgba(0,230,118,.2);
+  color:#00e676; border-radius:12px; padding:2px 8px; margin-left:auto;
+}
+
+.oc-compare-table td, .oc-compare-table th { min-width:60px; text-align:center; white-space:nowrap; }
+
+.oc-det-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+.oc-det-title  { font-size:16px; font-weight:700; }
+.oc-det-sub    { font-size:12px; color:var(--text3); margin-top:2px; }
+.oc-arb-alert  {
+  background:rgba(0,230,118,.15); border:1px solid rgba(0,230,118,.4);
+  color:#00e676; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600;
+}
+#oc-detail {
+  background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+  padding:16px; margin-top:16px;
+}
+
+.oc-arb-panel  { background:var(--bg3); border-radius:8px; padding:12px; margin-top:12px; }
+.oc-arb-leg    { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; text-align:center; min-width:100px; }
+.oc-arb-profit { margin-top:10px; font-size:13px; }
+
+.oc-arb-full-card {
+  background:var(--bg2); border:1px solid rgba(0,230,118,.3); border-radius:10px;
+  padding:14px; margin-bottom:10px;
+}
+
+/* ── Bankroll Manager ─────────────────────────────────────────────────────── */
+#panel-bankroll { display:flex; gap:16px; flex-wrap:wrap; }
+#bm-left        { flex:0 0 280px; display:flex; flex-direction:column; gap:12px; }
+#bm-right       { flex:1; min-width:300px; display:flex; flex-direction:column; gap:14px; }
+
+.bm-warning {
+  background:rgba(255,160,64,.15); border:1px solid rgba(255,160,64,.4);
+  color:#ffaa00; border-radius:6px; padding:8px 12px; font-size:12px;
+}
+.bm-status {
+  border-radius:8px; padding:10px 14px; font-size:13px; font-weight:500; margin-bottom:4px;
+}
+.bm-status.ok      { background:rgba(0,230,118,.12); border:1px solid rgba(0,230,118,.3); color:#00e676; }
+.bm-status.warning { background:rgba(255,160,64,.12); border:1px solid rgba(255,160,64,.3); color:#ffaa00; }
+.bm-status.stopped { background:rgba(255,69,96,.15);  border:1px solid rgba(255,69,96,.4);  color:#ff4560; }
+
+.bm-stake-suggest {
+  background:var(--bg3); border-radius:6px; padding:8px 10px;
+  font-size:12px; margin:4px 0 2px;
+}
+#bm-equity-chart-wrap { position:relative; height:220px; }
+#bm-stopLossAlert {
+  display:none; background:rgba(255,69,96,.15); border:1px solid rgba(255,69,96,.5);
+  border-radius:10px; padding:14px; text-align:center;
+}
+#bm-stopLossAlert h3 { color:#ff4560; margin:0 0 8px; }
+
+/* Toggle switch (shared) */
+.toggle-switch { position:relative; display:inline-block; width:36px; height:20px; flex-shrink:0; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider {
+  position:absolute; inset:0; background:var(--bg3); border-radius:10px;
+  cursor:pointer; transition:.2s;
+}
+.toggle-switch input:checked + .toggle-slider { background:var(--accent); }
+.toggle-slider::before {
+  content:''; position:absolute; width:14px; height:14px; border-radius:50%;
+  background:#fff; left:3px; top:3px; transition:.2s;
+}
+.toggle-switch input:checked + .toggle-slider::before { transform:translateX(16px); }
+
+/* ── Telegram Settings Panel ─────────────────────────────────────────────── */
+#panel-telegram { max-width:720px; }
+.tg-status-bar {
+  border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:16px;
+}
+.tg-status-bar.ok  { background:rgba(0,230,118,.12); border:1px solid rgba(0,230,118,.3); color:#00e676; }
+.tg-status-bar.off { background:rgba(255,160,64,.12); border:1px solid rgba(255,160,64,.3); color:#ffaa00; }
+
+.tg-section { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; }
+.tg-sec-title { font-size:13px; font-weight:600; color:var(--text2); margin-bottom:12px; }
+
+.tg-how-to {
+  background:var(--bg3); border-radius:8px; padding:12px 16px;
+  font-size:12px; color:var(--text2); margin-bottom:14px;
+  line-height:1.7;
+}
+.tg-how-to ol  { margin:0; padding-left:18px; }
+.tg-how-to a   { color:var(--accent); text-decoration:none; }
+.tg-how-to a:hover { text-decoration:underline; }
+.tg-how-to code { background:var(--bg2); padding:1px 5px; border-radius:3px; font-size:11px; }
+
+.tg-alerts-grid { display:flex; flex-direction:column; gap:10px; }
+.tg-alert-row {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:var(--bg3); border-radius:8px; padding:10px 12px;
+}
+.tg-alert-info    { display:flex; align-items:center; gap:10px; flex:1; min-width:180px; }
+.tg-alert-icon    { font-size:20px; flex-shrink:0; }
+.tg-alert-name    { font-size:13px; font-weight:600; }
+.tg-alert-desc    { font-size:11px; color:var(--text3); margin-top:1px; }
+.tg-alert-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+.tg-cmd-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
+.tg-cmd {
+  display:flex; align-items:center; gap:8px;
+  background:var(--bg3); border-radius:6px; padding:8px 10px;
+}
+.tg-cmd code { background:var(--bg2); padding:2px 6px; border-radius:4px; font-size:12px; color:var(--accent); }
+.tg-cmd span { font-size:12px; color:var(--text2); }
+
+/* ctrl-input sm variant */
+.ctrl-input.sm { padding:4px 8px; font-size:12px; height:auto; }
+
+/* ── Shared layout for Priority 2 panels ─────────────────────────────────── */
+.p2-two-col {
+  display:grid; grid-template-columns:260px 1fr; gap:16px;
+  align-items:start;
+}
+@media (max-width:700px) { .p2-two-col { grid-template-columns:1fr; } }
+
+.p2-panel-head {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:8px; margin-bottom:16px;
+}
+.p2-panel-head h2 { font-size:18px; font-weight:700; margin:0; }
+
+/* Loading spinners */
+#elo-loading, #oc-loading {
+  display:none; justify-content:center; align-items:center;
+  padding:40px; color:var(--text3); font-size:13px; gap:10px;
+}

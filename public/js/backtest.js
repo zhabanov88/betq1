@@ -107,6 +107,11 @@ const backtestEngine = {
 
   saveActiveStrategies() {
     localStorage.setItem('bq_bt_strategies', JSON.stringify(this.activeStrategies));
+
+    if (typeof telegramSettings !== 'undefined') {
+      telegramSettings.strategies = this.activeStrategies;
+      if (telegramSettings.tab === 'strategies') telegramSettings._renderTab();
+    }
   },
 
   addStrategySlot() {

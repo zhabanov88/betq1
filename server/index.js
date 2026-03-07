@@ -103,6 +103,18 @@ app.use('/api/live',  liveRoutes);
 app.use('/api/value', valueRoutes);
 app.use('/api/clv',   clvRoutes);
 
+// ── Priority 2 routes ────────────────────────────────────────────────────
+const { router: telegramRouter, tgAPI, store: tgStore } = require('./routes/telegram');
+const oddsCompareRoutes = require('./routes/odds-compare');
+
+app.use('/api/telegram',     telegramRouter);
+app.use('/api/odds-compare', oddsCompareRoutes);
+
+// Expose tgAPI globally so other routes can trigger alerts
+global.__betquant_tg    = tgAPI;
+global.__betquant_tgStore = tgStore;
+global.__betquant_pg    = pgPool;
+
 // ── Auth middleware ─────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
   if (req.session?.userId || req.session?.demo) return next();

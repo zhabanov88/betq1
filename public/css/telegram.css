@@ -1,0 +1,288 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   BetQuant Pro — Telegram Settings Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tabs ──────────────────────────────────────────────────────────────────── */
+.tg-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    margin-bottom: 20px;
+  }
+  .tg-tab {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: color .2s, border-color .2s;
+    margin-bottom: -1px;
+    border-radius: 6px 6px 0 0;
+  }
+  .tg-tab:hover  { color: var(--text1); background: var(--bg3); }
+  .tg-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+  
+  /* ── Section head ─────────────────────────────────────────────────────────── */
+  .tg-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .tg-sec-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  
+  /* ── Empty state ──────────────────────────────────────────────────────────── */
+  .tg-empty {
+    text-align: center;
+    padding: 32px;
+    color: var(--text3);
+    font-size: 13px;
+    background: var(--bg2);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    line-height: 1.7;
+  }
+  
+  /* ── Cards ────────────────────────────────────────────────────────────────── */
+  .tg-card-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .tg-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    flex-wrap: wrap;
+    transition: border-color .2s;
+  }
+  .tg-card.default { border-color: var(--accent); }
+  .tg-card.inactive { opacity: .6; }
+  .tg-card:hover { border-color: rgba(148,163,184,.5); }
+  
+  .tg-card-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+  .tg-card-icon { font-size: 22px; flex-shrink: 0; }
+  .tg-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tg-card-sub  { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .tg-card-sub code { background: var(--bg3); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  
+  .tg-card-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  
+  /* ── Badges ───────────────────────────────────────────────────────────────── */
+  .tg-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .tg-badge.default { background: rgba(0,212,255,.15); color: var(--accent); }
+  .tg-badge.off     { background: rgba(255,69,96,.15);  color: #ff4560; }
+  .tg-badge.sport   { background: var(--bg3); color: var(--text2); }
+  .tg-badge.type    { background: rgba(192,132,252,.15); color: #c084fc; }
+  
+  /* ── How-to box ───────────────────────────────────────────────────────────── */
+  .tg-how-to {
+    background: var(--bg3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.8;
+  }
+  .tg-how-to ol  { margin: 4px 0 0; padding-left: 18px; }
+  .tg-how-to a   { color: var(--accent); text-decoration: none; }
+  .tg-how-to a:hover { text-decoration: underline; }
+  .tg-how-to code {
+    background: var(--bg2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+  
+  /* ── Inline form ──────────────────────────────────────────────────────────── */
+  .tg-form {
+    background: var(--bg2);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 10px;
+  }
+  .tg-form-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; color: var(--accent); }
+  .tg-form-label { font-size: 12px; color: var(--text2); font-weight: 500; }
+  .tg-inline-status { font-size: 12px; }
+  .tg-inline-status.ok   { color: #00e676; }
+  .tg-inline-status.err  { color: #ff4560; }
+  .tg-inline-status.warn { color: #ffaa00; }
+  
+  /* ── Recipient chips in distributions ────────────────────────────────────── */
+  .tg-dist-recipients {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 5px;
+  }
+  .tg-rec-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2px 8px;
+    color: var(--text2);
+  }
+  
+  /* ── Check labels ─────────────────────────────────────────────────────────── */
+  .tg-check-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .tg-check-label:hover { border-color: var(--accent); }
+  .tg-check-label input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--accent); }
+  
+  /* ── Strategy grid ────────────────────────────────────────────────────────── */
+  .tg-strat-grid { display: flex; flex-direction: column; gap: 10px; }
+  .tg-strat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    transition: border-color .2s;
+  }
+  .tg-strat-card:hover   { border-color: rgba(148,163,184,.5); }
+  .tg-strat-card.disabled { opacity: .6; }
+  
+  .tg-strat-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .tg-strat-color {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .tg-strat-name { font-size: 14px; font-weight: 600; flex: 1; }
+  .tg-strat-off  {
+    font-size: 12px; color: var(--text3);
+    background: var(--bg3); border-radius: 6px;
+    padding: 6px 10px; text-align: center; margin-bottom: 8px;
+  }
+  .tg-strat-body { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .tg-strat-row  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tg-strat-label {
+    font-size: 11px;
+    color: var(--text3);
+    width: 60px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .tg-strat-hint { font-size: 11px; color: var(--text3); }
+  .tg-strat-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  /* ── Format panel ─────────────────────────────────────────────────────────── */
+  .tg-template-preview {
+    background: var(--bg3);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    color: var(--text2);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 6px 0;
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+  .tg-fmt-vars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 6px;
+  }
+  .tg-fmt-vars code {
+    background: var(--bg3);
+    padding: 2px 5px;
+    border-radius: 4px;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background .15s;
+    font-size: 11px;
+  }
+  .tg-fmt-vars code:hover { background: rgba(0,212,255,.15); }
+  
+  /* ── ctrl-select.sm ───────────────────────────────────────────────────────── */
+  .ctrl-select.sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    height: auto;
+  }
+  
+  /* ── Toggle switch (if not already in priority2.css) ─────────────────────── */
+  .toggle-switch { position:relative; display:inline-block; width:36px; height:20px; flex-shrink:0; }
+  .toggle-switch input { opacity:0; width:0; height:0; }
+  .toggle-slider {
+    position:absolute; inset:0; background:var(--bg3,#374151); border-radius:10px;
+    cursor:pointer; transition:.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background:var(--accent,#00d4ff); }
+  .toggle-slider::before {
+    content:''; position:absolute; width:14px; height:14px; border-radius:50%;
+    background:#fff; left:3px; top:3px; transition:.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider::before { transform:translateX(16px); }
+  
+  /* ── Responsive ───────────────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .tg-strat-row { flex-direction: column; align-items: flex-start; }
+    .tg-strat-label { width: auto; }
+    .tg-card { flex-direction: column; align-items: flex-start; }
+  }
