@@ -104,11 +104,25 @@ app.use('/api/value', valueRoutes);
 app.use('/api/clv',   clvRoutes);
 
 // ── Priority 2 routes ────────────────────────────────────────────────────
-const { router: telegramRouter, tgAPI, store: tgStore } = require('./routes/telegram');
-const oddsCompareRoutes = require('./routes/odds-compare');
+const telegramModule = (() => {
+  try {
+    return require('./telegram');
+  } catch(e) {
+    console.warn('⚠️  telegram module load error:', e.message);
+    return null;
+  }
+})();
 
-app.use('/api/telegram',     telegramRouter);
-app.use('/api/odds-compare', oddsCompareRoutes);
+if (telegramModule) {
+  app.use('/api/telegram', telegramModule.router);
+  global.__betquant_tg = telegramModule.tgAPI;
+}
+
+try {
+  const oddsCompareRoutes = require('./routes/odds-compare');
+  app.use('/api/odds-compare', oddsCompareRoutes);
+} catch(e) { console.warn('⚠️  odds-compare route error:', e.message); }
+
 
 // Expose tgAPI globally so other routes can trigger alerts
 global.__betquant_tg    = tgAPI;

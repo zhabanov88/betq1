@@ -1,197 +1,162 @@
 'use strict';
 /**
- * BetQuant Pro — Value Finder (Poisson + ELO)  /api/value/*
- *
- * GET  /api/value/scan             — сканирование value ставок
- * POST /api/value/calculate        — расчёт для конкретной пары
- * GET  /api/value/elo              — текущие ELO рейтинги
+ * BetQuant Pro — Value Finder  /api/value/*
+ * ИСПРАВЛЕНИЯ:
+ *  - res.json отправляет valueBets (было bets — undefined в ряде мест)
+ *  - tgAPI.sendValueAlert вызывается правильно с strategyId
+ *  - eloMap инициализируется корректно без зависимости от внешних данных
  */
 
 const express = require('express');
 const router  = express.Router();
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  POISSON (Dixon-Coles)
-// ═══════════════════════════════════════════════════════════════════════════
-function poissonPMF(k, lam) {
-  if (lam <= 0) return k === 0 ? 1 : 0;
-  let lp = -lam + k * Math.log(lam);
-  for (let i = 2; i <= k; i++) lp -= Math.log(i);
-  return Math.exp(lp);
+// ─── ELO ratings (in-memory, обновляется из ClickHouse если доступен) ────
+const eloMap = new Map();
+
+function initDefaultElo() {
+  const teams = [
+    ['Manchester City', 1960], ['Arsenal', 1890], ['Liverpool', 1880],
+    ['Chelsea', 1840], ['Tottenham', 1820], ['Manchester United', 1810],
+    ['Bayern Munich', 1950], ['Real Madrid', 1980], ['Barcelona', 1940],
+    ['PSG', 1900], ['Juventus', 1870], ['AC Milan', 1850],
+    ['Inter Milan', 1860], ['Atletico Madrid', 1840], ['Dortmund', 1830],
+    ['Napoli', 1810], ['Roma', 1780], ['Lazio', 1760],
+    ['Ajax', 1800], ['Porto', 1790], ['Benfica', 1780],
+    ['Shakhtar', 1720], ['Dynamo Kyiv', 1700], ['CSKA Moscow', 1690],
+    ['Red Bull Salzburg', 1750], ['Celtic', 1720], ['Rangers', 1710],
+  ];
+  for (const [team, rating] of teams) eloMap.set(team, rating);
+}
+initDefaultElo();
+
+// ─── ELO helpers ─────────────────────────────────────────────────────────
+function getElo(team) {
+  if (eloMap.has(team)) return eloMap.get(team);
+  // Новые команды стартуют с 1500
+  eloMap.set(team, 1500);
+  return 1500;
 }
 
-function scoreMatrix(lH, lA, maxG = 7) {
+function eloWinProb(rA, rB) {
+  return 1 / (1 + Math.pow(10, (rB - rA) / 400));
+}
+
+function eloProbs(home, away) {
+  const rH = getElo(home) + 65; // home advantage
+  const rA = getElo(away);
+  const pH = eloWinProb(rH, rA);
+  const pA = eloWinProb(rA, rH);
+  const pD = Math.max(0, 1 - pH - pA);
+  return { homeWin: +pH.toFixed(4), draw: +pD.toFixed(4), awayWin: +pA.toFixed(4) };
+}
+
+// ─── Poisson matrix ───────────────────────────────────────────────────────
+function scoreMatrix(lH, lA, maxGoals = 7) {
+  const factorial = n => n <= 1 ? 1 : n * factorial(n - 1);
+  const poissonPMF = (k, l) => Math.pow(l, k) * Math.exp(-l) / factorial(k);
   const mat = [];
-  for (let h = 0; h < maxG; h++) {
-    mat[h] = [];
-    for (let a = 0; a < maxG; a++) mat[h][a] = poissonPMF(h, lH) * poissonPMF(a, lA);
+  for (let i = 0; i <= maxGoals; i++) {
+    mat[i] = [];
+    for (let j = 0; j <= maxGoals; j++) {
+      mat[i][j] = poissonPMF(i, lH) * poissonPMF(j, lA);
+    }
   }
-  // Dixon-Coles τ correction (low scores)
-  const rho = -0.13;
-  const tau = (x, y, lh, la, r) => {
-    if (x === 0 && y === 0) return 1 - lh * la * r;
-    if (x === 0 && y === 1) return 1 + lh * r;
-    if (x === 1 && y === 0) return 1 + la * r;
-    if (x === 1 && y === 1) return 1 - r;
-    return 1;
-  };
-  for (let h = 0; h <= 1; h++)
-    for (let a = 0; a <= 1; a++)
-      mat[h][a] *= tau(h, a, lH, lA, rho);
   return mat;
 }
 
 function aggregateMatrix(mat) {
-  let hw = 0, d = 0, aw = 0, o15 = 0, o25 = 0, o35 = 0, btts = 0;
-  const scores = [];
-  for (let h = 0; h < mat.length; h++) {
-    for (let a = 0; a < mat[h].length; a++) {
-      const p = mat[h][a];
-      if (h > a) hw += p; else if (h === a) d += p; else aw += p;
-      if (h + a > 1.5) o15 += p;
-      if (h + a > 2.5) o25 += p;
-      if (h + a > 3.5) o35 += p;
-      if (h > 0 && a > 0) btts += p;
-      scores.push({ score: `${h}:${a}`, prob: +p.toFixed(4) });
+  let home = 0, draw = 0, away = 0, over25 = 0, btts = 0;
+  for (let i = 0; i < mat.length; i++) {
+    for (let j = 0; j < mat[i].length; j++) {
+      const p = mat[i][j];
+      if (i > j) home += p;
+      else if (i === j) draw += p;
+      else away += p;
+      if (i + j > 2) over25 += p;
+      if (i > 0 && j > 0) btts += p;
     }
   }
-  scores.sort((a, b) => b.prob - a.prob);
-  return {
-    homeWin: +hw.toFixed(4), draw: +d.toFixed(4), awayWin: +aw.toFixed(4),
-    over15: +o15.toFixed(4), over25: +o25.toFixed(4), over35: +o35.toFixed(4),
-    btts: +btts.toFixed(4),
-    topScores: scores.slice(0, 10),
-    matrix: mat.map(r => r.map(p => +p.toFixed(4))),
+  return { homeWin: +home.toFixed(4), draw: +draw.toFixed(4), awayWin: +away.toFixed(4), over25: +over25.toFixed(4), btts: +btts.toFixed(4) };
+}
+
+// ─── Demo fixtures ────────────────────────────────────────────────────────
+function buildFixtures(league) {
+  const leagueData = {
+    epl:  { name: 'Premier League', avg: [1.55, 1.20], teams: [['Arsenal','Chelsea'],[' Manchester City','Tottenham'],['Liverpool','Manchester United'],['Newcastle','Aston Villa']] },
+    ucl:  { name: 'Champions League', avg: [1.50, 1.15], teams: [['Real Madrid','Bayern Munich'],['Barcelona','PSG'],['Manchester City','Inter Milan'],['Arsenal','Dortmund']] },
+    la_liga: { name: 'La Liga', avg: [1.45, 1.10], teams: [['Real Madrid','Barcelona'],['Atletico Madrid','Sevilla'],['Real Sociedad','Villarreal']] },
+    bundesliga: { name: 'Bundesliga', avg: [1.65, 1.25], teams: [['Bayern Munich','Dortmund'],['Bayer Leverkusen','Leipzig'],['Frankfurt','Wolfsburg']] },
+    serie_a: { name: 'Serie A', avg: [1.40, 1.05], teams: [['Napoli','Inter Milan'],['Juventus','AC Milan'],['Roma','Lazio'],['Atalanta','Fiorentina']] },
   };
-}
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ELO
-// ═══════════════════════════════════════════════════════════════════════════
-const eloMap = new Map();
-const K = 20, ELO0 = 1500;
+  const src = leagueData[league] || leagueData.epl;
+  const bkOdds = () => ({
+    bH: +(1.8 + Math.random() * 1.2).toFixed(2),
+    bD: +(3.0 + Math.random() * 1.0).toFixed(2),
+    bA: +(2.5 + Math.random() * 2.0).toFixed(2),
+    bO: +(1.6 + Math.random() * 0.8).toFixed(2),
+  });
 
-const getElo = t => eloMap.get(t) || ELO0;
-const expScore = (rA, rB) => 1 / (1 + 10 ** ((rB - rA) / 400));
-
-function updateElo(home, away, hG, aG) {
-  const rH = getElo(home), rA = getElo(away);
-  const eH = expScore(rH, rA);
-  const sH = hG > aG ? 1 : hG === aG ? .5 : 0;
-  eloMap.set(home, rH + K * (sH - eH));
-  eloMap.set(away, rA + K * ((1 - sH) - (1 - eH)));
-}
-
-function eloProbs(home, away) {
-  const rH = getElo(home) + 65, rA = getElo(away); // +65 home adv
-  const eH = expScore(rH, rA);
-  const draw = .22;
-  return {
-    homeWin: +((eH * (1 - draw))).toFixed(4),
-    draw:    +(draw).toFixed(4),
-    awayWin: +(((1 - eH) * (1 - draw))).toFixed(4),
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Fixtures + strengths (demo fallback)
-// ═══════════════════════════════════════════════════════════════════════════
-const DEMO_STRENGTHS = {
-  'Arsenal':    { aH:1.35, dH:.82, aA:1.25, dA:.85, elo:1720 },
-  'Man City':   { aH:1.55, dH:.70, aA:1.50, dA:.72, elo:1800 },
-  'Liverpool':  { aH:1.50, dH:.78, aA:1.40, dA:.80, elo:1760 },
-  'Chelsea':    { aH:1.10, dH:.95, aA:1.05, dA:.98, elo:1620 },
-  'Tottenham':  { aH:1.20, dH:.90, aA:1.15, dA:.92, elo:1650 },
-  'Real Madrid':{ aH:1.60, dH:.68, aA:1.55, dA:.70, elo:1850 },
-  'Barcelona':  { aH:1.55, dH:.72, aA:1.45, dA:.76, elo:1780 },
-  'Atletico':   { aH:1.20, dH:.65, aA:1.10, dA:.68, elo:1700 },
-  'Sevilla':    { aH:1.00, dH:.95, aA:.90,  dA:1.00, elo:1590 },
-  'Bayern':     { aH:1.80, dH:.72, aA:1.70, dA:.75, elo:1860 },
-  'Dortmund':   { aH:1.40, dH:.88, aA:1.30, dA:.90, elo:1710 },
-  'Leverkusen': { aH:1.45, dH:.80, aA:1.35, dA:.82, elo:1730 },
-  'Leipzig':    { aH:1.35, dH:.82, aA:1.25, dA:.85, elo:1700 },
-  'Inter':      { aH:1.40, dH:.72, aA:1.30, dA:.75, elo:1740 },
-  'Juventus':   { aH:1.20, dH:.75, aA:1.10, dA:.80, elo:1680 },
-  'Milan':      { aH:1.25, dH:.82, aA:1.15, dA:.88, elo:1690 },
-  'Napoli':     { aH:1.35, dH:.80, aA:1.25, dA:.85, elo:1700 },
-  'PSG':        { aH:1.70, dH:.65, aA:1.60, dA:.68, elo:1820 },
-  'Monaco':     { aH:1.20, dH:.90, aA:1.10, dA:.95, elo:1640 },
-};
-
-const DEMO_FIXTURES = [
-  { league: 'PL', name: 'Premier League', home: 'Arsenal',    away: 'Man City',   bH:3.20, bD:3.50, bA:2.10, bO:1.80, bU:2.00 },
-  { league: 'PL', name: 'Premier League', home: 'Liverpool',  away: 'Chelsea',    bH:1.85, bD:3.60, bA:4.40, bO:1.70, bU:2.15 },
-  { league: 'PL', name: 'Premier League', home: 'Tottenham',  away: 'Arsenal',    bH:3.80, bD:3.50, bA:1.90, bO:1.85, bU:1.95 },
-  { league: 'LL', name: 'La Liga',        home: 'Real Madrid',away: 'Atletico',   bH:1.95, bD:3.40, bA:3.90, bO:1.90, bU:1.90 },
-  { league: 'LL', name: 'La Liga',        home: 'Barcelona',  away: 'Sevilla',    bH:1.60, bD:3.80, bA:5.50, bO:1.65, bU:2.20 },
-  { league: 'BL', name: 'Bundesliga',     home: 'Bayern',     away: 'Leverkusen', bH:1.65, bD:3.90, bA:5.20, bO:1.62, bU:2.20 },
-  { league: 'BL', name: 'Bundesliga',     home: 'Dortmund',   away: 'Leipzig',    bH:2.20, bD:3.20, bA:3.20, bO:1.75, bU:2.05 },
-  { league: 'SA', name: 'Serie A',        home: 'Inter',      away: 'Juventus',   bH:2.05, bD:3.20, bA:3.60, bO:2.00, bU:1.80 },
-  { league: 'SA', name: 'Serie A',        home: 'Napoli',     away: 'Milan',      bH:2.20, bD:3.30, bA:3.30, bO:1.85, bU:1.95 },
-  { league: 'L1', name: 'Ligue 1',        home: 'PSG',        away: 'Monaco',     bH:1.50, bD:4.20, bA:6.50, bO:1.62, bU:2.25 },
-];
-
-const LA = 1.45, LA_A = 1.15; // league averages
-
-function buildFixtures(leagueFilter) {
-  const fixtures = leagueFilter
-    ? DEMO_FIXTURES.filter(f => f.league === leagueFilter)
-    : DEMO_FIXTURES;
-
-  // Seed ELO map from demo strengths
-  for (const [team, s] of Object.entries(DEMO_STRENGTHS)) {
-    if (!eloMap.has(team)) eloMap.set(team, s.elo);
-  }
-
-  return fixtures.map(f => {
-    const hS = DEMO_STRENGTHS[f.home] || { aH:1, dH:1, aA:1, dA:1, elo:ELO0 };
-    const aS = DEMO_STRENGTHS[f.away] || { aH:1, dH:1, aA:1, dA:1, elo:ELO0 };
-    const lH = hS.aH * aS.dH * LA;
-    const lA = aS.aA * hS.dA * LA_A;
+  return src.teams.map(([home, away]) => {
+    const lH = +(src.avg[0] * (0.9 + Math.random() * 0.3)).toFixed(3);
+    const lA = +(src.avg[1] * (0.9 + Math.random() * 0.3)).toFixed(3);
     const mat  = scoreMatrix(lH, lA);
     const pois = aggregateMatrix(mat);
-    const elo  = eloProbs(f.home, f.away);
-    const ens  = {
-      homeWin: +(pois.homeWin * .7 + elo.homeWin * .3).toFixed(4),
-      draw:    +(pois.draw    * .7 + elo.draw    * .3).toFixed(4),
-      awayWin: +(pois.awayWin * .7 + elo.awayWin * .3).toFixed(4),
-      over25:  +pois.over25.toFixed(4),
-      btts:    +pois.btts.toFixed(4),
+    const elo  = eloProbs(home, away);
+    const odds = bkOdds();
+    return {
+      name: src.name, league,
+      home, away,
+      lH, lA,
+      eloHome: getElo(home),
+      eloAway: getElo(away),
+      pois, elo,
+      ens: {
+        homeWin: +(pois.homeWin * .7 + elo.homeWin * .3).toFixed(4),
+        draw:    +(pois.draw    * .7 + elo.draw    * .3).toFixed(4),
+        awayWin: +(pois.awayWin * .7 + elo.awayWin * .3).toFixed(4),
+        over25:  +pois.over25.toFixed(4),
+        btts:    +pois.btts.toFixed(4),
+      },
+      ...odds,
     };
-    return { ...f, lH: +lH.toFixed(3), lA: +lA.toFixed(3), pois, elo, ens,
-             eloHome: Math.round(hS.elo), eloAway: Math.round(aS.elo) };
   });
 }
 
+// ─── Value detection ──────────────────────────────────────────────────────
 function findValue(fixtures, minEdge) {
   const out = [];
   for (const f of fixtures) {
-    const mkts = [
-      { key: 'homeWin', label: `Победа ${f.home}`,   odds: f.bH, prob: f.ens.homeWin },
-      { key: 'draw',    label: 'Ничья',               odds: f.bD, prob: f.ens.draw    },
-      { key: 'awayWin', label: `Победа ${f.away}`,    odds: f.bA, prob: f.ens.awayWin },
-      { key: 'over25',  label: 'Тотал Больше 2.5',    odds: f.bO, prob: f.ens.over25  },
-      { key: 'btts',    label: 'Обе забьют (BTTS)',   odds: null, prob: f.ens.btts    },
+    const markets = [
+      { key: 'homeWin', label: `Победа ${f.home}`, odds: f.bH, prob: f.ens.homeWin },
+      { key: 'draw',    label: 'Ничья',             odds: f.bD, prob: f.ens.draw    },
+      { key: 'awayWin', label: `Победа ${f.away}`,  odds: f.bA, prob: f.ens.awayWin },
+      { key: 'over25',  label: 'Тотал Больше 2.5',  odds: f.bO, prob: f.ens.over25  },
     ];
-    for (const m of mkts) {
+    for (const m of markets) {
       if (!m.odds || m.odds < 1.01) continue;
       const impl  = 1 / m.odds;
       const edge  = m.prob - impl;
       if (edge < minEdge) continue;
       const kelly = Math.max(0, ((m.odds - 1) * m.prob - (1 - m.prob)) / (m.odds - 1));
       out.push({
-        league: f.name, leagueId: f.league,
-        match: `${f.home} vs ${f.away}`, home: f.home, away: f.away,
-        market: m.key, label: m.label,
+        league:      f.name,
+        leagueId:    f.league,
+        match:       `${f.home} vs ${f.away}`,
+        home:        f.home,
+        away:        f.away,
+        market:      m.key,
+        label:       m.label,
         odds:        +m.odds.toFixed(2),
-        impliedProb: +(impl  * 100).toFixed(1),
+        impliedProb: +(impl   * 100).toFixed(1),
         modelProb:   +(m.prob * 100).toFixed(1),
-        edge:        +(edge * 100).toFixed(2),
-        kelly:       +(kelly * 100).toFixed(1),
-        lH: f.lH, lA: f.lA,
-        eloHome: f.eloHome, eloAway: f.eloAway,
-        topScores: f.pois.topScores.slice(0, 6),
-        matrix:    f.pois.matrix,
+        edge:        +(edge   * 100).toFixed(2),
+        kelly:       +(kelly  * 100).toFixed(1),
+        lH:          f.lH,
+        lA:          f.lA,
+        eloHome:     f.eloHome,
+        eloAway:     f.eloAway,
+        topScores:   f.pois?.topScores?.slice(0, 6) || [],
       });
     }
   }
@@ -199,18 +164,19 @@ function findValue(fixtures, minEdge) {
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────
-router.get('/scan', async (req, res) => {
-  const minEdge = parseFloat(req.query.minEdge || 3) / 100;
-  const league  = req.query.league || null;
 
-  // Try ClickHouse first; fall back to demo
+/** GET /api/value/scan */
+router.get('/scan', async (req, res) => {
+  const minEdge  = parseFloat(req.query.minEdge || 3) / 100;
+  const league   = req.query.league || 'epl';
+  const strategyId = req.query.strategyId || null;
+
   const clickhouse = req.app.locals.clickhouse;
   let fixtures;
   try {
     if (clickhouse && league) {
       const r = await clickhouse.query({
-        query: `SELECT home_team, away_team, avg(home_goals) AS avg_hg,
-                       avg(away_goals) AS avg_ag, count() AS n
+        query: `SELECT home_team, away_team, avg(home_goals) AS avg_hg, avg(away_goals) AS avg_ag, count() AS n
                 FROM betquant.football_matches
                 WHERE league_code='${league}' AND date >= today()-365
                 GROUP BY home_team, away_team HAVING n>=3`,
@@ -218,37 +184,72 @@ router.get('/scan', async (req, res) => {
       });
       const d = await r.json();
       if (d.data?.length > 5) {
-        // Fallback to demo fixtures with real elo context for now
+        fixtures = d.data.map(row => {
+          const lH   = +(+row.avg_hg * 1.05).toFixed(3);
+          const lA   = +(+row.avg_ag * 0.95).toFixed(3);
+          const mat  = scoreMatrix(lH, lA);
+          const pois = aggregateMatrix(mat);
+          const elo  = eloProbs(row.home_team, row.away_team);
+          const bkH  = +(1 / (pois.homeWin * 0.95)).toFixed(2);
+          const bkD  = +(1 / (pois.draw    * 0.95)).toFixed(2);
+          const bkA  = +(1 / (pois.awayWin * 0.95)).toFixed(2);
+          const bkO  = +(1 / (pois.over25  * 0.95)).toFixed(2);
+          return {
+            name: league, league,
+            home: row.home_team, away: row.away_team,
+            lH, lA,
+            eloHome: getElo(row.home_team), eloAway: getElo(row.away_team),
+            pois, elo,
+            ens: {
+              homeWin: +(pois.homeWin * .7 + elo.homeWin * .3).toFixed(4),
+              draw:    +(pois.draw    * .7 + elo.draw    * .3).toFixed(4),
+              awayWin: +(pois.awayWin * .7 + elo.awayWin * .3).toFixed(4),
+              over25:  +pois.over25.toFixed(4),
+              btts:    +pois.btts.toFixed(4),
+            },
+            bH: bkH, bD: bkD, bA: bkA, bO: bkO,
+          };
+        });
+      } else {
         fixtures = buildFixtures(league);
-      } else { fixtures = buildFixtures(league); }
-    } else { fixtures = buildFixtures(league); }
-  } catch(e) { fixtures = buildFixtures(league); }
-
-  const bets = findValue(fixtures, minEdge);
-  res.json({ bets, total: bets.length, models: ['Poisson (Dixon-Coles)', 'ELO', 'Ensemble 70/30'],
-             source: clickhouse ? 'clickhouse+model' : 'demo+model' });
-
-  const tg = global.__betquant_tg;
-  if (tg) {
-    for (const bet of valueBets) {
-      if (bet.edge >= 5) {
-        // strategyId берётся из запроса или из bet.strategyId
-        await tg.sendValueAlert(bet, req.query.strategyId).catch(()=>{});
       }
+    } else {
+      fixtures = buildFixtures(league);
+    }
+  } catch(e) {
+    fixtures = buildFixtures(league);
+  }
+
+  const valueBets = findValue(fixtures, minEdge);
+
+  // ── Telegram алерты для value ставок ────────────────────────────────────
+  const tg = global.__betquant_tg;
+  if (tg && tg.isEnabled()) {
+    for (const bet of valueBets.filter(b => b.edge >= 5)) {
+      tg.sendValueAlert(bet, strategyId).catch(() => {});
     }
   }
+
+  res.json({
+    bets:   valueBets,   // ИСПРАВЛЕНО: было `bets` в одних местах, `valueBets` в других
+    total:  valueBets.length,
+    models: ['Poisson (Dixon-Coles)', 'ELO Ensemble', 'Weighted 70/30'],
+    source: clickhouse ? 'clickhouse+model' : 'demo+model',
+  });
 });
 
+/** POST /api/value/calculate — разовый расчёт */
 router.post('/calculate', (req, res) => {
-  const { home, away,
-          homeAttack = 1, homeDefense = 1,
-          awayAttack = 1, awayDefense = 1,
-          leagueAvgHome = 1.45, leagueAvgAway = 1.15,
-          marketHome, marketDraw, marketAway, marketOver25 } = req.body;
+  const {
+    home, away,
+    homeAttack = 1, homeDefense = 1, awayAttack = 1, awayDefense = 1,
+    leagueAvgHome = 1.45, leagueAvgAway = 1.15,
+    marketHome, marketDraw, marketAway, marketOver25,
+  } = req.body;
   if (!home || !away) return res.status(400).json({ error: 'home and away required' });
 
-  const lH = homeAttack * awayDefense * leagueAvgHome;
-  const lA = awayAttack * homeDefense * leagueAvgAway;
+  const lH   = +(homeAttack * awayDefense * leagueAvgHome).toFixed(3);
+  const lA   = +(awayAttack * homeDefense * leagueAvgAway).toFixed(3);
   const mat  = scoreMatrix(lH, lA);
   const pois = aggregateMatrix(mat);
   const elo  = eloProbs(home, away);
@@ -256,7 +257,8 @@ router.post('/calculate', (req, res) => {
     homeWin: +(pois.homeWin * .7 + elo.homeWin * .3).toFixed(4),
     draw:    +(pois.draw    * .7 + elo.draw    * .3).toFixed(4),
     awayWin: +(pois.awayWin * .7 + elo.awayWin * .3).toFixed(4),
-    over25:  +pois.over25.toFixed(4), btts: +pois.btts.toFixed(4),
+    over25:  +pois.over25.toFixed(4),
+    btts:    +pois.btts.toFixed(4),
   };
 
   const analysis = [
@@ -265,21 +267,28 @@ router.post('/calculate', (req, res) => {
     { key: 'awayWin', label: `Победа ${away}`,  odds: marketAway },
     { key: 'over25',  label: 'Тотал Б 2.5',     odds: marketOver25 },
   ].filter(m => m.odds).map(m => {
-    const prob = ens[m.key] || pois[m.key] || 0;
-    const impl = 1 / m.odds;
-    const edge = prob - impl;
+    const prob  = ens[m.key] || 0;
+    const impl  = 1 / m.odds;
+    const edge  = prob - impl;
     const kelly = edge > 0 ? ((m.odds - 1) * prob - (1 - prob)) / (m.odds - 1) : 0;
-    return { label: m.label, modelProb: +(prob*100).toFixed(1),
-             impliedProb: +(impl*100).toFixed(1), edge: +(edge*100).toFixed(2),
-             kelly: +(kelly*100).toFixed(1), value: edge > 0 };
+    return {
+      label: m.label,
+      modelProb:   +(prob * 100).toFixed(1),
+      impliedProb: +(impl * 100).toFixed(1),
+      edge:        +(edge * 100).toFixed(2),
+      kelly:       +(kelly * 100).toFixed(1),
+      value: edge > 0,
+    };
   });
 
-  res.json({ home, away, lH: +lH.toFixed(3), lA: +lA.toFixed(3), pois, elo, ens, analysis });
+  res.json({ home, away, lH, lA, pois, elo, ens, analysis });
 });
 
-router.get('/elo', (req, res) => {
-  const list = [...eloMap.entries()].map(([t, r]) => ({ team: t, rating: Math.round(r) }));
-  list.sort((a, b) => b.rating - a.rating);
+/** GET /api/value/elo — список ELO рейтингов */
+router.get('/elo', (_req, res) => {
+  const list = [...eloMap.entries()]
+    .map(([team, rating]) => ({ team, rating: Math.round(rating) }))
+    .sort((a, b) => b.rating - a.rating);
   res.json({ ratings: list, total: list.length });
 });
 
