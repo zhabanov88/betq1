@@ -10,13 +10,24 @@ services:
       - "23000:3000"
     env_file: .env
     environment:
+      - PORT=3000
+      - NODE_ENV=production
       - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_DATABASE=betquant
+      - PG_USER=betquant
+      - PG_PASSWORD=betquant123
       - CH_HOST=http://clickhouse:8123
+      - CH_USER=default
+      - CH_PASSWORD=
+      - CH_DATABASE=betquant
     depends_on:
       postgres:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks: [bq]
 
@@ -34,42 +45,126 @@ services:
     ports:
       - "25432:5432"
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U ${PG_USER:-betquant}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-betquant}"]
       interval: 5s
       retries: 10
     restart: unless-stopped
     networks: [bq]
 
   # ───────── ClickHouse ─────────
+  # Важно: ClickHouse НЕ выполняет .sql из /docker-entrypoint-initdb.d/ автоматически.
+  # Инициализация схемы делается отдельным сервисом clickhouse-init (см. ниже).
   clickhouse:
-    image: clickhouse/clickhouse-server:24
+    image: clickhouse/clickhouse-server:24.3
     container_name: betquant-ch
     environment:
-      CLICKHOUSE_DB:       ${CH_DATABASE:-betquant}
-      CLICKHOUSE_USER:     ${CH_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CH_PASSWORD:-}
+      CLICKHOUSE_DB:                    ${CH_DATABASE:-betquant}
+      CLICKHOUSE_USER:                  ${CH_USER:-default}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
       - ch-data:/var/lib/clickhouse
-      - ./init-scripts/02_init_clickhouse.sql:/docker-entrypoint-initdb.d/02_init.sql
+      - ch-logs:/var/log/clickhouse-server
     ports:
       - "8123:8123"
       - "9000:9000"
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
     healthcheck:
-      test: ["CMD","wget","-qO-","http://localhost:8123/ping"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
       interval: 5s
-      retries: 10
+      timeout: 5s
+      retries: 15
     restart: unless-stopped
     networks: [bq]
 
-  # ───────── Redis (опционально) ─────────
+  # ───────── ClickHouse Schema Init ─────────
+  # Запускается один раз после того как ClickHouse стал healthy.
+  # Применяет legacy-схему + расширенную схему (football, hockey, tennis, basketball, etc.)
+  # После завершается (exit 0) — это нормально.
+  clickhouse-init:
+    image: clickhouse/clickhouse-client:24.3
+    container_name: betquant-ch-init
+    volumes:
+      - ./init-scripts/02_init_clickhouse.sh:/init.sh
+      - ./init-scripts/02_init_clickhouse.sql:/init_legacy.sql
+      - ./init-scripts/02_init_clickhouse_extended.sql:/init_extended.sql
+    entrypoint: ["sh", "/init.sh"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+    networks: [bq]
+
+  # ───────── ETL v1 — Data Collector (Football, Hockey, Tennis, NBA, MLB) ─────────
+  # Загружает реальные исторические данные из открытых источников в ClickHouse.
+  #
+  # Запуск вручную:
+  #   docker compose --profile etl run --rm etl
+  #   docker compose --profile etl run --rm etl python3 run_etl.py --quick --seasons 1
+  #
+  # Или через UI: панель "Data Collector" → кнопка "▶ Запустить ETL"
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: betquant-etl
+    environment:
+      CH_HOST:     http://clickhouse:8123
+      CH_DB:       betquant
+      CH_USER:     default
+      CH_PASS:     ""
+      ETL_SEASONS: "3"
+      ETL_LEAGUES: top
+    volumes:
+      - etl-cache:/opt/etl-cache
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+    restart: "no"
+    profiles: ["etl"]
+    networks: [bq]
+
+  # ───────── ETL v2 — Extended Sports (Basketball, Cricket, Rugby, NFL, Waterpolo, Volleyball) ─────
+  # Загружает расширенные данные по 6 видам спорта с детальной статистикой.
+  #
+  # Запуск вручную:
+  #   docker compose --profile etl-v2 run --rm etl-v2
+  #   docker compose --profile etl-v2 run --rm etl-v2 python3 run_etl_v2.py --sport cricket --quick --seasons 1
+  etl-v2:
+    build:
+      context: .
+      dockerfile: sports-etl-v2/Dockerfile.etl_v2
+    container_name: betquant-etl-v2
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB:  betquant
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - etl-cache:/app/cache
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+    restart: "no"
+    profiles: ["etl-v2"]
+    networks: [bq]
+
+  # ───────── Redis ─────────
   redis:
     image: redis:7-alpine
     container_name: betquant-redis
-    ports: ["6379:6379"]
-    volumes: [redis-data:/data]
-    command: redis-server --appendonly yes --maxmemory 256mb
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
     restart: unless-stopped
     networks: [bq]
 
@@ -81,14 +176,17 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on: [app]
+    depends_on:
+      - app
     restart: unless-stopped
     networks: [bq]
 
 volumes:
   pg-data:
   ch-data:
+  ch-logs:
   redis-data:
+  etl-cache:
 
 networks:
   bq:

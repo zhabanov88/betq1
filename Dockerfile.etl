@@ -1,8 +1,7 @@
 FROM python:3.11-slim
 
-LABEL description="BetQuant ETL — Data Population Service"
+LABEL description="BetQuant ETL v1 — Football/Hockey/Tennis/NBA/MLB Data Loader"
 
-# Зависимости
 RUN pip install --no-cache-dir \
     requests \
     beautifulsoup4 \
@@ -14,12 +13,12 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /opt/etl
 
-# Копируем ETL скрипты
+# Копируем ETL v1 скрипты
 COPY betquant-etl/ ./
 
-RUN chmod +x deploy_and_run.sh
+RUN chmod +x deploy_and_run.sh 2>/dev/null || true
 
-# По умолчанию запускаем full ETL
+# По умолчанию — полный ETL, 3 сезона
 CMD ["python3", "run_etl.py", \
      "--ch-host", "http://clickhouse:8123", \
      "--ch-db",   "betquant", \

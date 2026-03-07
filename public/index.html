@@ -521,6 +521,73 @@
             </div>
         </div>
 
+        <!-- ETL SECTION — Real Data Loader -->
+        <div style="margin-top:24px;padding:20px;background:var(--bg2);border-radius:12px;border:1px solid var(--border)">
+            <div style="font-size:16px;font-weight:700;color:var(--text1);margin-bottom:16px">🚀 Real Data ETL — Загрузка реальных исторических данных</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+            <div>
+                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">ВИД СПОРТА</label>
+                <select id="etlSport" class="ctrl-select" style="width:100%">
+                <option value="all">Все виды</option>
+                <option value="football" selected>⚽ Футбол</option>
+                <option value="hockey">🏒 Хоккей</option>
+                <option value="other">🎾 Теннис / NBA / MLB</option>
+                <option value="basketball">🏀 Баскетбол (NBA v2)</option>
+                <option value="cricket">🏏 Крикет</option>
+                <option value="rugby">🏉 Регби</option>
+                <option value="nfl">🏈 NFL</option>
+                <option value="waterpolo">🤽 Водное поло</option>
+                <option value="volleyball">🏐 Волейбол</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">СЕЗОНОВ НАЗАД</label>
+                <select id="etlSeasons" class="ctrl-select" style="width:100%">
+                <option value="1">1 сезон (~быстро)</option>
+                <option value="3" selected>3 сезона (~1-2 часа)</option>
+                <option value="5">5 сезонов (~3-4 часа)</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">РЕЖИМ</label>
+                <select id="etlMode" class="ctrl-select" style="width:100%">
+                <option value="full" selected>Полный (все лиги)</option>
+                <option value="quick">Быстрый (топ-5 лиг)</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">ВЕРСИЯ ETL</label>
+                <select id="etlVersion" class="ctrl-select" style="width:100%">
+                <option value="v1" selected>v1 (Футбол/Хоккей/Теннис)</option>
+                <option value="v2">v2 (NBA/Cricket/Rugby/NFL)</option>
+                </select>
+            </div>
+            </div>
+        
+            <!-- DB Status -->
+            <div id="etlDbStatus" style="margin-bottom:14px;padding:10px 14px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text2);display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px">
+            <span>⏳ Загружаем статус БД...</span>
+            </div>
+        
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="ctrl-btn primary" onclick="etlManager.run()" id="etlRunBtn">▶ Запустить ETL</button>
+            <button class="ctrl-btn" onclick="etlManager.loadStatus()">🔄 Обновить статус</button>
+            <button class="ctrl-btn" onclick="etlManager.viewLog()">📋 ETL Лог</button>
+            </div>
+        
+            <!-- Progress -->
+            <div id="etlProgress" style="display:none;margin-top:16px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <span id="etlProgressMsg" style="font-size:12px;color:var(--text2)">Загружаем...</span>
+                <span id="etlProgressPct" style="font-size:12px;font-weight:700;color:var(--accent)">0%</span>
+            </div>
+            <div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
+                <div id="etlProgressBar" style="height:100%;width:0%;background:var(--accent);transition:width 0.5s"></div>
+            </div>
+            <div id="etlLogOutput" style="margin-top:10px;max-height:200px;overflow-y:auto;background:var(--bg3);border-radius:6px;padding:10px;font-family:monospace;font-size:11px;color:var(--text2)"></div>
+            </div>
+        </div>
+
     </main>
 </div>
 <!-- Modals -->
@@ -635,5 +702,6 @@
 <script src="js/journal.js"></script>
 <script src="js/walkforward.js"></script>
 <script src="js/library.js"></script>
+<script src="js/etl-manager.js"></script>
 </body>
 </html>

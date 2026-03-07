@@ -1,6 +1,8 @@
 /**
  * BetQuant — ETL Manager UI
  * Управление загрузкой реальных данных через /api/etl/*
+ * Поддерживает ETL v1 (футбол/хоккей/теннис/NBA/MLB) и
+ * ETL v2 (баскетбол/крикет/регби/NFL/водное поло/волейбол)
  */
 
 const etlManager = {
@@ -17,14 +19,17 @@ const etlManager = {
       const data = await fetch('/api/stats/etl-status').then(r => r.json());
 
       const items = [
-        { key: 'football_matches',    icon: '⚽', label: 'Футбол матчи' },
-        { key: 'football_events',     icon: '⚽', label: 'Футбол события' },
-        { key: 'football_team_form',  icon: '⚽', label: 'Футбол форма' },
-        { key: 'hockey_matches',      icon: '🏒', label: 'Хоккей матчи' },
-        { key: 'hockey_events',       icon: '🏒', label: 'Хоккей события' },
-        { key: 'tennis_extended',     icon: '🎾', label: 'Теннис' },
-        { key: 'basketball_matches',  icon: '🏀', label: 'Баскетбол' },
-        { key: 'baseball_matches',    icon: '⚾', label: 'Бейсбол' },
+        { key: 'football_matches',      icon: '⚽', label: 'Футбол' },
+        { key: 'hockey_matches',        icon: '🏒', label: 'Хоккей' },
+        { key: 'tennis_extended',       icon: '🎾', label: 'Теннис' },
+        { key: 'basketball_matches',    icon: '🏀', label: 'NBA v1' },
+        { key: 'baseball_matches',      icon: '⚾', label: 'Бейсбол' },
+        { key: 'basketball_matches_v2', icon: '🏀', label: 'NBA v2' },
+        { key: 'cricket_matches',       icon: '🏏', label: 'Крикет' },
+        { key: 'rugby_matches',         icon: '🏉', label: 'Регби' },
+        { key: 'nfl_games',             icon: '🏈', label: 'NFL' },
+        { key: 'waterpolo_matches',     icon: '🤽', label: 'Водное поло' },
+        { key: 'volleyball_matches',    icon: '🏐', label: 'Волейбол' },
       ];
 
       const fmtN = n => n >= 1000000
@@ -33,9 +38,7 @@ const etlManager = {
         ? (n / 1000).toFixed(0) + 'K'
         : String(n || 0);
 
-      const totalRows = Object.values(data)
-        .filter((v, k) => typeof v === 'number')
-        .reduce((s, v) => s + (v || 0), 0);
+      const totalRows = items.reduce((s, it) => s + (data[it.key] || 0), 0);
 
       let html = items.map(it => {
         const n = data[it.key] || 0;
@@ -43,7 +46,6 @@ const etlManager = {
         return `<span style="color:${color}">${it.icon} ${it.label}: <b>${fmtN(n)}</b></span>`;
       }).join('');
 
-      // Диапазон дат футбол
       const range = data._football_range;
       if (range && range.from_d && range.from_d !== '1970-01-01') {
         html += `<span style="color:var(--accent)">📅 Футбол: ${range.from_d} — ${range.to_d}</span>`;
@@ -66,12 +68,12 @@ const etlManager = {
     const sport   = document.getElementById('etlSport')?.value   || 'football';
     const seasons = document.getElementById('etlSeasons')?.value || '3';
     const mode    = document.getElementById('etlMode')?.value    || 'full';
+    const version = document.getElementById('etlVersion')?.value || 'v1';
     const quick   = mode === 'quick';
 
     const btn = document.getElementById('etlRunBtn');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Запускаем...'; }
 
-    // Показываем прогресс
     const prog = document.getElementById('etlProgress');
     if (prog) prog.style.display = 'block';
     this._setProgress(0, 'Запускаем ETL...');
@@ -80,7 +82,7 @@ const etlManager = {
       const resp = await fetch('/api/etl/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sport, seasons: parseInt(seasons), quick }),
+        body: JSON.stringify({ sport, seasons: parseInt(seasons), quick, version }),
       });
       const data = await resp.json();
 
@@ -92,14 +94,12 @@ const etlManager = {
 
       this._taskId = data.taskId;
       this._startPolling();
-
     } catch (e) {
       this._setProgress(0, `❌ Ошибка: ${e.message}`);
       if (btn) { btn.disabled = false; btn.textContent = '▶ Запустить ETL'; }
     }
   },
 
-  // ── Polling прогресса ──────────────────────────────────────────
   _startPolling() {
     if (this._pollInterval) clearInterval(this._pollInterval);
     this._pollInterval = setInterval(() => this._poll(), 2000);
@@ -111,12 +111,12 @@ const etlManager = {
       const data = await fetch(`/api/etl/progress/${this._taskId}`).then(r => r.json());
       this._setProgress(data.pct || 0, data.message || '');
 
-      // Обновляем лог
       if (data.log && data.log.length) {
         const logEl = document.getElementById('etlLogOutput');
         if (logEl) {
           logEl.innerHTML = data.log.slice(-50).map(l => {
-            const cls = l.startsWith('✅') || l.includes('✓') ? 'color:var(--green,#4caf50)'
+            const cls = l.startsWith('✅') || l.includes('✓') || l.includes('loaded')
+                       ? 'color:var(--green,#4caf50)'
                        : l.startsWith('❌') || l.startsWith('ERR') ? 'color:var(--red,#f44)'
                        : l.startsWith('⚠') ? 'color:var(--orange,#ff9800)'
                        : 'color:var(--text2)';
@@ -131,17 +131,18 @@ const etlManager = {
         this._pollInterval = null;
         const btn = document.getElementById('etlRunBtn');
         if (btn) { btn.disabled = false; btn.textContent = '▶ Запустить ETL'; }
-        // Обновляем статус БД
         setTimeout(() => this.loadStatus(), 1000);
         if (data.status === 'done') {
-          setTimeout(() => app.showNotification('✅ ETL завершён! База данных заполнена.', 'success'), 500);
+          if (typeof app !== 'undefined' && app.showNotification) {
+            setTimeout(() => app.showNotification('✅ ETL завершён! База данных заполнена.', 'success'), 500);
+          }
         }
       }
     } catch (e) { /* игнорируем временные ошибки */ }
   },
 
   _setProgress(pct, msg) {
-    const bar = document.getElementById('etlProgressBar');
+    const bar   = document.getElementById('etlProgressBar');
     const msgEl = document.getElementById('etlProgressMsg');
     const pctEl = document.getElementById('etlProgressPct');
     if (bar)   bar.style.width = `${pct}%`;
@@ -188,7 +189,6 @@ const etlManager = {
         </div>
       `;
 
-      // Показываем в модальном окне если есть, иначе alert
       const modal = document.getElementById('sqlModal');
       if (modal) {
         const content = modal.querySelector('.modal-content');
@@ -211,14 +211,12 @@ const etlManager = {
     }
   },
 
-  // ── Инициализация ─────────────────────────────────────────────
   init() {
     this.loadStatus();
   }
 };
 
-// Автозапуск при показе панели скрапера
+// Автозапуск при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
-  // Загружаем статус при первой загрузке страницы (с задержкой)
   setTimeout(() => etlManager.loadStatus(), 2000);
 });
