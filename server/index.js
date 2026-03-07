@@ -87,6 +87,10 @@ try {
     });
   testCh();
 } catch (e) { console.warn('⚠️  @clickhouse/client issue:', e.message); }
+// ── Neural Networks ────────────────────────────────────────────────────────
+app.locals.clickhouse = clickhouse;
+const neuralRoutes = require('./neural');
+app.use('/api/neural', neuralRoutes);
 
 // ── Auth middleware ─────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {

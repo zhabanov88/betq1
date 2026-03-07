@@ -100,6 +100,10 @@ const app = {
     if (name === 'stats') statsEngine.load();
     if (name === 'library') library.load();
     if (name === 'value') valueFinder.init();
+
+    if (name === 'neural' && typeof neuralPanel !== 'undefined') {
+      neuralPanel.init();
+    }
   },
   
   setSport(sport) {

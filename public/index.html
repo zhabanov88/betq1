@@ -88,6 +88,10 @@
             <button class="sidebar-btn" data-panel="journal" onclick="app.showPanel('journal')"><span class="sidebar-icon">📓</span> Bet Journal</button>
         </div>
         <div class="sidebar-section">
+            <div class="sidebar-label">AI MODELS</div>
+            <button class="sidebar-btn" data-panel="neural" onclick="app.showPanel('neural')"><span class="sidebar-icon">🧠</span> Neural Networks</button>
+        </div>
+        <div class="sidebar-section">
             <div class="sidebar-label">CONFIG</div>
             <button class="sidebar-btn" data-panel="llm-settings" onclick="app.showPanel('llm-settings');llmSettings.init()"><span class="sidebar-icon">🧠</span> LLM Settings</button>
         </div>
@@ -589,6 +593,25 @@
             </div>
         </div>
 
+        <!-- NEURAL NETWORKS -->
+        <div class="panel" id="panel-neural">
+            <div class="nn-header">
+            <div>
+                <div class="nn-header-title">🧠 Нейросетевой анализ</div>
+                <div class="nn-header-sub">Автообучаемые модели · Веса с объяснениями · Нестандартные стратегии</div>
+            </div>
+            <div class="nn-header-actions">
+                <button class="nn-btn green" onclick="neuralPanel.trainSport('all')">▶ Обучить все</button>
+                <button class="nn-btn" onclick="neuralPanel.loadStatus().then(()=>neuralPanel.renderStatus())">🔄 Обновить</button>
+            </div>
+            </div>
+            <div id="nn-status-grid"></div>
+            <div id="nn-sport-tabs"></div>
+            <div class="nn-content">
+            <div id="nn-weights-panel"><div class="nn-empty">Выбери вид спорта и обучи модель</div></div>
+            <div id="nn-strategies-panel"><div class="nn-empty">Стратегии появятся после обучения</div></div>
+            </div>
+        </div>
     </main>
 </div>
 <!-- Modals -->
@@ -705,5 +728,6 @@
 <script src="js/library.js"></script>
 <script src="js/etl-manager.js"></script>
 <script src="/js/neural.js"></script>
+<script src="/js/neural_frontend.js"></script>
 </body>
 </html>
