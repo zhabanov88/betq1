@@ -1,0 +1,7 @@
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir requests clickhouse-connect pandas numpy schedule
+COPY server/data-collectors/ ./collectors/
+# Simple cron-like scheduler
+RUN echo '#!/bin/sh\nwhile true; do\n  echo "[$(date)] Running daily collection..."\n  python /app/collectors/football_data_uk.py E0,SP1,D1 $(date +%y%y)\n  sleep 86400\ndone' > /app/run.sh && chmod +x /app/run.sh
+CMD ["/app/run.sh"]
