@@ -88,29 +88,41 @@ const app = {
     document.getElementById('appContainer').classList.add('hidden');
   },
   
-  showPanel(name) {
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
-    const panel = document.getElementById('panel-' + name);
-    if (panel) panel.classList.add('active');
-    const btn = document.querySelector('.sidebar-btn[data-panel="' + name + '"]');
-    if (btn) btn.classList.add('active');
-    this.currentPanel = name;
-    if (name === 'database') db.refresh();
-    if (name === 'stats') statsEngine.load();
-    if (name === 'library') library.load();
-    if (name === 'value') valueFinder.init();
+// ── ЗАМЕНИ функцию showPanel в public/js/app.js ──────────────────────────
+// Найди: showPanel(name) {
+// Замени всю функцию на эту:
 
-    if (name === 'neural' && typeof neuralPanel !== 'undefined') {
-      neuralPanel.init();
-    }
-    if (name === 'live' && typeof liveMonitor !== 'undefined') liveMonitor.init();
-    if (name === 'clv'  && typeof clvTracker  !== 'undefined') clvTracker.init();
-    if (name === 'elo'      && typeof eloPanel          !== 'undefined') eloPanel.init();
-    if (name === 'oc'       && typeof oddsCompare        !== 'undefined') oddsCompare.init();
-    if (name === 'bankroll' && typeof bankrollManager    !== 'undefined') bankrollManager.init();
-    if (name === 'telegram' && typeof telegramSettings   !== 'undefined') telegramSettings.init();
-  },
+showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => {
+    p.classList.remove('active');
+    // Убираем инлайн display:none который переопределяет CSS-класс active
+    if (p.style.display === 'none') p.style.display = '';
+  });
+  document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
+
+  const panel = document.getElementById('panel-' + name);
+  if (panel) {
+    panel.style.display = ''; // снять возможный инлайн none
+    panel.classList.add('active');
+  }
+  const btn = document.querySelector('.sidebar-btn[data-panel="' + name + '"]');
+  if (btn) btn.classList.add('active');
+  this.currentPanel = name;
+
+  // Инициализация модулей при открытии панели
+  if (name === 'database')  db.refresh();
+  if (name === 'stats')     statsEngine.load();
+  if (name === 'library')   library.load();
+  if (name === 'value')     valueFinder.init();
+  if (name === 'neural'     && typeof neuralPanel      !== 'undefined') neuralPanel.init();
+  if (name === 'live'       && typeof liveMonitor      !== 'undefined') liveMonitor.init();
+  if (name === 'clv'        && typeof clvTracker       !== 'undefined') clvTracker.init();
+  if (name === 'elo'        && typeof eloPanel         !== 'undefined') eloPanel.init();
+  if (name === 'oc'         && typeof oddsCompare      !== 'undefined') oddsCompare.init();
+  if (name === 'bankroll'   && typeof bankrollManager  !== 'undefined') bankrollManager.init();
+  if (name === 'telegram'   && typeof telegramSettings !== 'undefined') telegramSettings.init();
+  if (name === 'llm-settings' && typeof llmSettings   !== 'undefined') llmSettings.init();
+},
   
   setSport(sport) {
     this.currentSport = sport;
