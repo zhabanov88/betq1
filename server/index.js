@@ -302,8 +302,14 @@ app.post('/api/backtest', requireAuth, async (req, res) => {
       matches = d.data || [];
     }
     if (!matches.length) {
-      // Demo data fallback
-      matches = generateDemoMatches(config);
+      if (config.demoMode === true) {
+        matches = generateDemoMatches(config);
+      } else {
+        return res.status(422).json({
+          error: 'Нет данных для бэктеста. Подключите ClickHouse и загрузите исторические данные, либо включите тестовый режим (кнопка «Тестовые данные» в параметрах бэктеста).',
+          hint: 'enable_demo',
+        });
+      }
     }
     const result = runBacktest(strategyCode, matches, config);
     res.json(result);
@@ -311,23 +317,23 @@ app.post('/api/backtest', requireAuth, async (req, res) => {
 });
 
 function generateDemoMatches(config = {}) {
-  const leagues = ['EPL','Bundesliga','La Liga','Serie A','Ligue 1'];
+  const leagues = ['АПЛ', 'Бундеслига', 'Ла Лига', 'Серия А', 'Лига 1'];
   const matches = [];
   const now = new Date();
   for (let i = 0; i < 2000; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     matches.push({
-      date: d.toISOString().slice(0,10),
-      league: leagues[i % 5],
-      home_team: `Team_H${i % 20}`,
-      away_team: `Team_A${i % 20}`,
-      home_goals: Math.floor(Math.random() * 4),
-      away_goals: Math.floor(Math.random() * 4),
-      b365_home: +(1.5 + Math.random() * 2).toFixed(2),
-      b365_draw: +(2.8 + Math.random() * 1).toFixed(2),
-      b365_away: +(2.0 + Math.random() * 3).toFixed(2),
-      b365_over25: +(1.7 + Math.random() * 0.6).toFixed(2),
+      date:         d.toISOString().slice(0, 10),
+      league:       leagues[i % 5],
+      home_team:    `Команда_Д${i % 20}`,
+      away_team:    `Команда_Г${i % 20}`,
+      home_goals:   Math.floor(Math.random() * 4),
+      away_goals:   Math.floor(Math.random() * 4),
+      b365_home:    +(1.5 + Math.random() * 2).toFixed(2),
+      b365_draw:    +(2.8 + Math.random() * 1).toFixed(2),
+      b365_away:    +(2.0 + Math.random() * 3).toFixed(2),
+      b365_over25:  +(1.7 + Math.random() * 0.6).toFixed(2),
       b365_under25: +(1.9 + Math.random() * 0.8).toFixed(2),
     });
   }

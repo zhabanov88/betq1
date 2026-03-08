@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BetQuant Pro — Advanced Betting Analytics</title>
+    <title>BetQuant Pro — Аналитика ставок</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
@@ -17,12 +17,12 @@
     <div class="login-bg"><div class="login-grid"></div><div class="login-orb orb1"></div><div class="login-orb orb2"></div></div>
     <div class="login-card">
         <div class="login-logo"><span class="logo-icon">⬡</span><span class="logo-text">BetQuant<span class="logo-pro">PRO</span></span></div>
-        <p class="login-tagline">Advanced Betting Analytics & Backtesting Platform</p>
+        <p class="login-tagline">Продвинутая аналитика и бэктестинг ставок</p>
         <div class="login-form">
-            <input type="text" id="loginUsername" placeholder="Username" class="login-input">
-            <input type="password" id="loginPassword" placeholder="Password" class="login-input">
-            <button class="login-btn" onclick="app.login()">ENTER PLATFORM</button>
-            <button class="login-btn login-btn-secondary" onclick="app.loginAsGuest()">DEMO ACCESS</button>
+            <input type="text" id="loginUsername" placeholder="Логин" class="login-input">
+            <input type="password" id="loginPassword" placeholder="Пароль" class="login-input">
+            <button class="login-btn" onclick="app.login()">ВОЙТИ</button>
+            <button class="login-btn login-btn-secondary" onclick="app.loginAsGuest()">ДЕМО ДОСТУП</button>
         </div>
         <div class="login-status" id="loginStatus"></div>
     </div>
@@ -32,12 +32,12 @@
         <div class="topnav-left">
             <div class="nav-logo"><span class="logo-icon">⬡</span><span>BetQuant<span class="logo-pro">PRO</span></span></div>
             <div class="nav-sport-selector">
-                <button class="sport-btn active" data-sport="football" onclick="app.setSport('football')">⚽ Football</button>
-                <button class="sport-btn" data-sport="tennis" onclick="app.setSport('tennis')">🎾 Tennis</button>
-                <button class="sport-btn" data-sport="basketball" onclick="app.setSport('basketball')">🏀 Basketball</button>
-                <button class="sport-btn" data-sport="hockey" onclick="app.setSport('hockey')">🏒 Hockey</button>
-                <button class="sport-btn" data-sport="baseball" onclick="app.setSport('baseball')">⚾ Baseball</button>
-                <button class="sport-btn" data-sport="esports" onclick="app.setSport('esports')">🎮 eSports</button>
+                <button class="sport-btn active" data-sport="football" onclick="app.setSport('football')">⚽ Футбол</button>
+                <button class="sport-btn" data-sport="tennis" onclick="app.setSport('tennis')">🎾 Теннис</button>
+                <button class="sport-btn" data-sport="basketball" onclick="app.setSport('basketball')">🏀 Баскетбол</button>
+                <button class="sport-btn" data-sport="hockey" onclick="app.setSport('hockey')">🏒 Хоккей</button>
+                <button class="sport-btn" data-sport="baseball" onclick="app.setSport('baseball')">⚾ Бейсбол</button>
+                <button class="sport-btn" data-sport="esports" onclick="app.setSport('esports')">🎮 Киберспорт</button>
             </div>
         </div>
         <div class="topnav-center">
@@ -53,24 +53,24 @@
         </div>
         <div class="topnav-right">
             <button class="nav-btn" onclick="app.toggleTheme()">◐</button>
-            <button class="nav-btn" onclick="app.openDataSources()">🗄 Sources</button>
+            <button class="nav-btn" onclick="app.openDataSources()">🗄 Источники</button>
             <button class="nav-btn" onclick="app.openSettings()">⚙</button>
             <div class="user-chip"><span id="navUsername">Demo</span><button class="nav-btn-sm" onclick="app.logout()">×</button></div>
         </div>
     </nav>
     <div class="sidebar" id="sidebar">
         <div class="sidebar-section">
-            <div class="sidebar-label">ANALYSE</div>
-            <button class="sidebar-btn active" data-panel="dashboard" onclick="app.showPanel('dashboard')"><span class="sidebar-icon">▦</span> Dashboard</button>
-            <button class="sidebar-btn" data-panel="charts" onclick="app.showPanel('charts')"><span class="sidebar-icon">📈</span> Charts & Odds</button>
-            <button class="sidebar-btn" data-panel="stats" onclick="app.showPanel('stats')"><span class="sidebar-icon">📊</span> Statistics</button>
-            <button class="sidebar-btn" data-panel="value" onclick="app.showPanel('value')"><span class="sidebar-icon">💎</span> Value Finder</button>
+            <div class="sidebar-label">АНАЛИЗ</div>
+            <button class="sidebar-btn active" data-panel="dashboard" onclick="app.showPanel('dashboard')"><span class="sidebar-icon">▦</span> Дашборд</button>
+            <button class="sidebar-btn" data-panel="charts" onclick="app.showPanel('charts')"><span class="sidebar-icon">📈</span> Графики и коэффициенты</button>
+            <button class="sidebar-btn" data-panel="stats" onclick="app.showPanel('stats')"><span class="sidebar-icon">📊</span> Статистика</button>
+            <button class="sidebar-btn" data-panel="value" onclick="app.showPanel('value')"><span class="sidebar-icon">💎</span> Поиск ценных ставок</button>
             <button class="sidebar-btn" data-panel="live" onclick="app.showPanel('live')">
-                <span class="sidebar-icon">🔴</span> Live Monitor
+                <span class="sidebar-icon">🔴</span> Лайв монитор
                 <span class="lm-badge" style="display:none"></span>
             </button>
             <button class="sidebar-btn" data-panel="clv" onclick="app.showPanel('clv')">
-                <span class="sidebar-icon">📐</span> CLV Tracker
+                <span class="sidebar-icon">📐</span> CLV трекер
             </button>
               <!-- ELO Ratings -->
             <button class="sidebar-btn" data-panel="elo" onclick="app.showPanel('elo')">
@@ -93,61 +93,61 @@
             </button>
         </div>
         <div class="sidebar-section">
-            <div class="sidebar-label">BACKTEST</div>
-            <button class="sidebar-btn" data-panel="backtest" onclick="app.showPanel('backtest')"><span class="sidebar-icon">⏪</span> Backtest Engine</button>
+            <div class="sidebar-label">БЭКТЕСТ</div>
+            <button class="sidebar-btn" data-panel="backtest" onclick="app.showPanel('backtest')"><span class="sidebar-icon">⏪</span> Движок бэктеста</button>
             <button class="sidebar-btn" data-panel="walkforward" onclick="app.showPanel('walkforward')"><span class="sidebar-icon">🔄</span> Walk-Forward</button>
-            <button class="sidebar-btn" data-panel="montecarlo" onclick="app.showPanel('montecarlo')"><span class="sidebar-icon">🎲</span> Monte Carlo</button>
-            <button class="sidebar-btn" data-panel="optimizer" onclick="app.showPanel('optimizer')"><span class="sidebar-icon">⚡</span> Optimizer</button>
+            <button class="sidebar-btn" data-panel="montecarlo" onclick="app.showPanel('montecarlo')"><span class="sidebar-icon">🎲</span> Монте-Карло</button>
+            <button class="sidebar-btn" data-panel="optimizer" onclick="app.showPanel('optimizer')"><span class="sidebar-icon">⚡</span> Оптимизатор</button>
         </div>
         <div class="sidebar-section">
-            <div class="sidebar-label">STRATEGY</div>
-            <button class="sidebar-btn" data-panel="strategy" onclick="app.showPanel('strategy')"><span class="sidebar-icon">📝</span> Strategy Builder</button>
-            <button class="sidebar-btn" data-panel="ai-strategy" onclick="app.showPanel('ai-strategy')"><span class="sidebar-icon">🤖</span> AI Strategy</button>
-            <button class="sidebar-btn" data-panel="library" onclick="app.showPanel('library')"><span class="sidebar-icon">📚</span> Library</button>
+            <div class="sidebar-label">СТРАТЕГИЯ</div>
+            <button class="sidebar-btn" data-panel="strategy" onclick="app.showPanel('strategy')"><span class="sidebar-icon">📝</span> Конструктор стратегий</button>
+            <button class="sidebar-btn" data-panel="ai-strategy" onclick="app.showPanel('ai-strategy')"><span class="sidebar-icon">🤖</span> AI стратегия</button>
+            <button class="sidebar-btn" data-panel="library" onclick="app.showPanel('library')"><span class="sidebar-icon">📚</span> Библиотека</button>
         </div>
         <div class="sidebar-section">
-            <div class="sidebar-label">DATA</div>
-            <button class="sidebar-btn" data-panel="database" onclick="app.showPanel('database')"><span class="sidebar-icon">🗄</span> Database</button>
-            <button class="sidebar-btn" data-panel="scraper" onclick="app.showPanel('scraper')"><span class="sidebar-icon">🕷</span> Data Collector</button>
-            <button class="sidebar-btn" data-panel="odds-history" onclick="app.showPanel('odds-history')"><span class="sidebar-icon">📋</span> Odds History</button>
+            <div class="sidebar-label">ДАННЫЕ</div>
+            <button class="sidebar-btn" data-panel="database" onclick="app.showPanel('database')"><span class="sidebar-icon">🗄</span> База данных</button>
+            <button class="sidebar-btn" data-panel="scraper" onclick="app.showPanel('scraper')"><span class="sidebar-icon">🕷</span> Сборщик данных</button>
+            <button class="sidebar-btn" data-panel="odds-history" onclick="app.showPanel('odds-history')"><span class="sidebar-icon">📋</span> История коэффициентов</button>
         </div>
         <div class="sidebar-section">
-            <div class="sidebar-label">TOOLS</div>
-            <button class="sidebar-btn" data-panel="alerts" onclick="app.showPanel('alerts')"><span class="sidebar-icon">🔔</span> Alerts</button>
-            <button class="sidebar-btn" data-panel="journal" onclick="app.showPanel('journal')"><span class="sidebar-icon">📓</span> Bet Journal</button>
+            <div class="sidebar-label">ИНСТРУМЕНТЫ</div>
+            <button class="sidebar-btn" data-panel="alerts" onclick="app.showPanel('alerts')"><span class="sidebar-icon">🔔</span> Алерты</button>
+            <button class="sidebar-btn" data-panel="journal" onclick="app.showPanel('journal')"><span class="sidebar-icon">📓</span> Журнал ставок</button>
         </div>
         <div class="sidebar-section">
-            <div class="sidebar-label">AI MODELS</div>
-            <button class="sidebar-btn" data-panel="neural" onclick="app.showPanel('neural')"><span class="sidebar-icon">🧠</span> Neural Networks</button>
+            <div class="sidebar-label">AI МОДЕЛИ</div>
+            <button class="sidebar-btn" data-panel="neural" onclick="app.showPanel('neural')"><span class="sidebar-icon">🧠</span> Нейросети</button>
         </div>
         <div class="sidebar-section">
-            <div class="sidebar-label">CONFIG</div>
-            <button class="sidebar-btn" data-panel="llm-settings" onclick="app.showPanel('llm-settings');llmSettings.init()"><span class="sidebar-icon">🧠</span> LLM Settings</button>
+            <div class="sidebar-label">НАСТРОЙКИ</div>
+            <button class="sidebar-btn" data-panel="llm-settings" onclick="app.showPanel('llm-settings');llmSettings.init()"><span class="sidebar-icon">🧠</span> Настройки LLM</button>
         </div>
     </div>
     <main class="main-content" id="mainContent">
         <!-- DASHBOARD -->
         <div class="panel active" id="panel-dashboard">
             <div class="panel-header">
-                <h2>Dashboard</h2>
+                <h2>Дашборд</h2>
                 <div class="panel-controls">
-                    <select class="ctrl-select" id="dashPeriod" onchange="dashboard.refresh()"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="365">1 year</option></select>
+                    <select class="ctrl-select" id="dashPeriod" onchange="dashboard.refresh()"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option><option value="365">1 год</option></select>
                     <button class="ctrl-btn" onclick="dashboard.refresh()">↻</button>
                 </div>
             </div>
             <div class="kpi-grid">
-                <div class="kpi-card"><div class="kpi-label">Total Bets</div><div class="kpi-value" id="kpiBets">—</div><div class="kpi-delta" id="kpiBetsDelta"></div></div>
-                <div class="kpi-card"><div class="kpi-label">Win Rate</div><div class="kpi-value" id="kpiWinRate">—</div><div class="kpi-delta" id="kpiWinRateDelta"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Всего ставок</div><div class="kpi-value" id="kpiBets">—</div><div class="kpi-delta" id="kpiBetsDelta"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Процент побед</div><div class="kpi-value" id="kpiWinRate">—</div><div class="kpi-delta" id="kpiWinRateDelta"></div></div>
                 <div class="kpi-card highlight"><div class="kpi-label">ROI</div><div class="kpi-value" id="kpiROI">—</div><div class="kpi-delta" id="kpiROIDelta"></div></div>
                 <div class="kpi-card"><div class="kpi-label">Profit (units)</div><div class="kpi-value" id="kpiProfit">—</div><div class="kpi-delta" id="kpiProfitDelta"></div></div>
-                <div class="kpi-card"><div class="kpi-label">Avg Odds</div><div class="kpi-value" id="kpiAvgOdds">—</div><div class="kpi-delta" id="kpiAvgOddsDelta"></div></div>
-                <div class="kpi-card"><div class="kpi-label">Max Drawdown</div><div class="kpi-value" id="kpiDrawdown">—</div><div class="kpi-delta" id="kpiDrawdownDelta"></div></div>
-                <div class="kpi-card"><div class="kpi-label">Sharpe Ratio</div><div class="kpi-value" id="kpiSharpe">—</div><div class="kpi-delta" id="kpiSharpeDelta"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Средний коэф.</div><div class="kpi-value" id="kpiAvgOdds">—</div><div class="kpi-delta" id="kpiAvgOddsDelta"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Макс. просадка</div><div class="kpi-value" id="kpiDrawdown">—</div><div class="kpi-delta" id="kpiDrawdownDelta"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Коэф. Шарпа</div><div class="kpi-value" id="kpiSharpe">—</div><div class="kpi-delta" id="kpiSharpeDelta"></div></div>
                 <div class="kpi-card"><div class="kpi-label">CLV Avg</div><div class="kpi-value" id="kpiYield">—</div><div class="kpi-delta" id="kpiYieldDelta"></div></div>
             </div>
             <div class="chart-grid">
                 <div class="chart-card large"><div class="chart-card-header"><span>Bankroll Growth</span></div><canvas id="chartBankroll" height="200"></canvas></div>
-                <div class="chart-card"><div class="chart-card-header"><span>Odds Distribution</span></div><canvas id="chartOddsDistrib" height="200"></canvas></div>
+                <div class="chart-card"><div class="chart-card-header"><span>Распределение коэффициентов</span></div><canvas id="chartOddsDistrib" height="200"></canvas></div>
                 <div class="chart-card"><div class="chart-card-header"><span>Win/Loss by League</span></div><canvas id="chartLeagueWL" height="200"></canvas></div>
                 <div class="chart-card"><div class="chart-card-header"><span>Monthly P&L</span></div><canvas id="chartMonthlyPL" height="200"></canvas></div>
                 <div class="chart-card"><div class="chart-card-header"><span>Bet Type Performance</span></div><canvas id="chartBetTypes" height="200"></canvas></div>
@@ -157,7 +157,7 @@
         <!-- CHARTS -->
         <div class="panel" id="panel-value">
             <div class="panel-header">
-                <h2>💎 Value Finder</h2>
+                <h2>💎 Поиск ценных ставок</h2>
                 <div class="panel-controls">
                 <button class="ctrl-btn primary" id="vfScanBtn" onclick="valueFinder.scan()">🔍 Сканировать</button>
                 </div>
@@ -194,7 +194,7 @@
             <div class="clv-kpis">
                 <div class="clv-kpi"><div class="clv-kpi-label">Средний CLV</div><div class="clv-kpi-val positive" id="clvAvg">—</div></div>
                 <div class="clv-kpi"><div class="clv-kpi-label">CLV+ ставок</div><div class="clv-kpi-val" id="clvPosRate">—</div></div>
-                <div class="clv-kpi"><div class="clv-kpi-label">Win Rate</div><div class="clv-kpi-val" id="clvWinRate">—</div></div>
+                <div class="clv-kpi"><div class="clv-kpi-label">Процент побед</div><div class="clv-kpi-val" id="clvWinRate">—</div></div>
                 <div class="clv-kpi"><div class="clv-kpi-label">P&L</div><div class="clv-kpi-val" id="clvPnl">—</div></div>
                 <div class="clv-kpi"><div class="clv-kpi-label">Всего ставок</div><div class="clv-kpi-val" id="clvTotal">—</div></div>
                 <div class="clv-kpi"><div class="clv-kpi-label">Закрытых</div><div class="clv-kpi-val" id="clvSettled">—</div></div>
@@ -214,7 +214,7 @@
         <!-- BACKTEST -->
         <div class="panel" id="panel-backtest">
             <div class="panel-header">
-                <h2>⏪ Backtest Engine</h2>
+                <h2>⏪ Движок бэктеста</h2>
                 <div class="panel-controls">
                     <button class="ctrl-btn" onclick="backtestEngine.addStrategySlot()">+ Стратегия</button>
                     <button class="ctrl-btn" onclick="backtestEngine.addParlayRule()">🎯 + Экспресс</button>
@@ -315,77 +315,77 @@
         </div>
         <!-- MONTE CARLO -->
         <div class="panel" id="panel-montecarlo">
-            <div class="panel-header"><h2>🎲 Monte Carlo</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="monteCarlo.run()">▶ Simulate</button></div></div>
+            <div class="panel-header"><h2>🎲 Монте-Карло</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="monteCarlo.run()">▶ Симулировать</button></div></div>
             <div class="mc-layout">
                 <div class="mc-config">
                     <div class="config-section">
-                        <div class="config-title">Parameters</div>
-                        <div class="config-row"><label>Simulations</label><input type="number" class="ctrl-input" id="mcSimCount" value="10000"></div>
-                        <div class="config-row"><label>Bets per run</label><input type="number" class="ctrl-input" id="mcBetsPerRun" value="500"></div>
-                        <div class="config-row"><label>Start Bankroll</label><input type="number" class="ctrl-input" id="mcBankroll" value="1000"></div>
-                        <div class="config-row"><label>Win Rate %</label><input type="number" class="ctrl-input" id="mcWinRate" value="52" step="0.5"></div>
-                        <div class="config-row"><label>Avg Odds</label><input type="number" class="ctrl-input" id="mcAvgOdds" value="2.0" step="0.05"></div>
-                        <div class="config-row"><label>Stake per bet %</label><input type="number" class="ctrl-input" id="mcStake" value="2" step="0.5"></div>
-                        <div class="config-row"><label>Ruin Threshold %</label><input type="number" class="ctrl-input" id="mcRuinThreshold" value="10"></div>
+                        <div class="config-title">Параметры</div>
+                        <div class="config-row"><label>Симуляции</label><input type="number" class="ctrl-input" id="mcSimCount" value="10000"></div>
+                        <div class="config-row"><label>Ставок за серию</label><input type="number" class="ctrl-input" id="mcBetsPerRun" value="500"></div>
+                        <div class="config-row"><label>Начальный банкролл</label><input type="number" class="ctrl-input" id="mcBankroll" value="1000"></div>
+                        <div class="config-row"><label>Процент побед %</label><input type="number" class="ctrl-input" id="mcWinRate" value="52" step="0.5"></div>
+                        <div class="config-row"><label>Средний коэф.</label><input type="number" class="ctrl-input" id="mcAvgOdds" value="2.0" step="0.05"></div>
+                        <div class="config-row"><label>Размер ставки %</label><input type="number" class="ctrl-input" id="mcStake" value="2" step="0.5"></div>
+                        <div class="config-row"><label>Порог краха %</label><input type="number" class="ctrl-input" id="mcRuinThreshold" value="10"></div>
                     </div>
                     <div class="mc-summary" id="mcSummary"></div>
                 </div>
                 <div class="mc-charts">
-                    <div class="chart-card large"><div class="chart-card-header"><span>Equity Paths (500 simulations)</span></div><canvas id="chartMCPaths" height="280"></canvas></div>
+                    <div class="chart-card large"><div class="chart-card-header"><span>Кривые капитала (500 симуляций)</span></div><canvas id="chartMCPaths" height="280"></canvas></div>
                     <div class="chart-grid-2col">
-                        <div class="chart-card"><div class="chart-card-header"><span>Final Bankroll Distribution</span></div><canvas id="chartMCDistrib" height="200"></canvas></div>
-                        <div class="chart-card"><div class="chart-card-header"><span>Ruin Probability Curve</span></div><canvas id="chartMCRuin" height="200"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header"><span>Распределение итогового банкролла</span></div><canvas id="chartMCDistrib" height="200"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header"><span>Кривая вероятности краха</span></div><canvas id="chartMCRuin" height="200"></canvas></div>
                     </div>
                 </div>
             </div>
         </div>
         <!-- OPTIMIZER -->
         <div class="panel" id="panel-optimizer">
-            <div class="panel-header"><h2>⚡ Parameter Optimizer</h2>
+            <div class="panel-header"><h2>⚡ Оптимизатор параметров</h2>
                 <div class="panel-controls">
-                    <select class="ctrl-select" id="optMethod"><option value="grid">Grid Search</option><option value="genetic">Genetic Algorithm</option><option value="bayesian">Bayesian Opt.</option></select>
-                    <button class="ctrl-btn primary" onclick="optimizer.run()">▶ Optimize</button>
+                    <select class="ctrl-select" id="optMethod"><option value="grid">Перебор сетки</option><option value="genetic">Генетический алгоритм</option><option value="bayesian">Байесовская опт.</option></select>
+                    <button class="ctrl-btn primary" onclick="optimizer.run()">▶ Оптимизировать</button>
                 </div>
             </div>
             <div class="opt-layout">
                 <div class="opt-config">
                     <div class="config-section">
-                        <div class="config-title">Parameters to Optimize</div>
+                        <div class="config-title">Параметры to Optimize</div>
                         <div id="optParamList" class="opt-param-list"></div>
-                        <button class="ctrl-btn" onclick="optimizer.addParam()">+ Add Parameter</button>
+                        <button class="ctrl-btn" onclick="optimizer.addParam()">+ Добавить параметр</button>
                     </div>
                     <div class="config-section">
-                        <div class="config-title">Objective Function</div>
-                        <select class="ctrl-select full-width" id="optObjective"><option value="roi">Maximize ROI</option><option value="sharpe">Maximize Sharpe</option><option value="profit">Maximize Profit</option><option value="calmar">Maximize Calmar</option></select>
+                        <div class="config-title">Целевая функция</div>
+                        <select class="ctrl-select full-width" id="optObjective"><option value="roi">Максимизировать ROI</option><option value="sharpe">Максимизировать Шарп</option><option value="profit">Максимизировать прибыль</option><option value="calmar">Максимизировать Калмар</option></select>
                     </div>
                 </div>
                 <div class="opt-results">
-                    <div id="optProgress" class="progress-bar-wrap" style="display:none"><div class="progress-bar" id="optProgressBar"></div><div class="progress-text" id="optProgressText">Optimizing...</div></div>
-                    <div class="chart-card large"><div class="chart-card-header"><span>Optimization Heatmap</span></div><canvas id="chartOptSurface" height="300"></canvas></div>
+                    <div id="optProgress" class="progress-bar-wrap" style="display:none"><div class="progress-bar" id="optProgressBar"></div><div class="progress-text" id="optProgressText">Оптимизация...</div></div>
+                    <div class="chart-card large"><div class="chart-card-header"><span>Тепловая карта оптимизации</span></div><canvas id="chartOptSurface" height="300"></canvas></div>
                     <div id="optResultsTable" class="data-table-container"></div>
                 </div>
             </div>
         </div>
         <!-- STRATEGY BUILDER -->
         <div class="panel" id="panel-strategy">
-            <div class="panel-header"><h2>📝 Strategy Builder</h2>
+            <div class="panel-header"><h2>📝 Конструктор стратегий</h2>
                 <div class="panel-controls">
-                    <input type="text" class="ctrl-input" id="strategyName" placeholder="Strategy name...">
-                    <button class="ctrl-btn" onclick="strategyBuilder.save()">💾 Save</button>
-                    <button class="ctrl-btn primary" onclick="strategyBuilder.runBacktest()">▶ Quick Backtest</button>
+                    <input type="text" class="ctrl-input" id="strategyName" placeholder="Название стратегии...">
+                    <button class="ctrl-btn" onclick="strategyBuilder.save()">💾 Сохранить</button>
+                    <button class="ctrl-btn primary" onclick="strategyBuilder.runBacktest()">▶ Быстрый бэктест</button>
                 </div>
             </div>
             <div class="strategy-layout">
                 <div class="strategy-sidebar">
-                    <div class="config-section"><div class="config-title">Market Filters</div><div class="filter-builder" id="marketFilters"></div><button class="ctrl-btn sm" onclick="strategyBuilder.addFilter('market')">+ Add Filter</button></div>
-                    <div class="config-section"><div class="config-title">Stats Conditions</div><div class="filter-builder" id="statsFilters"></div><button class="ctrl-btn sm" onclick="strategyBuilder.addFilter('stats')">+ Add Condition</button></div>
-                    <div class="config-section"><div class="config-title">Odds Conditions</div><div class="filter-builder" id="oddsFilters"></div><button class="ctrl-btn sm" onclick="strategyBuilder.addFilter('odds')">+ Add Condition</button></div>
+                    <div class="config-section"><div class="config-title">Фильтры рынков</div><div class="filter-builder" id="marketFilters"></div><button class="ctrl-btn sm" onclick="strategyBuilder.addFilter('market')">+ Добавить фильтр</button></div>
+                    <div class="config-section"><div class="config-title">Условия статистики</div><div class="filter-builder" id="statsFilters"></div><button class="ctrl-btn sm" onclick="strategyBuilder.addFilter('stats')">+ Добавить условие</button></div>
+                    <div class="config-section"><div class="config-title">Условия коэффициентов</div><div class="filter-builder" id="oddsFilters"></div><button class="ctrl-btn sm" onclick="strategyBuilder.addFilter('odds')">+ Добавить условие</button></div>
                 </div>
                 <div class="strategy-editor">
                     <div class="strategy-editor-tabs">
-                        <button class="strat-tab active" onclick="strategyBuilder.showTab('visual')">Visual Builder</button>
-                        <button class="strat-tab" onclick="strategyBuilder.showTab('code')">Code Editor</button>
-                        <button class="strat-tab" onclick="strategyBuilder.showTab('docs')">API Docs</button>
+                        <button class="strat-tab active" onclick="strategyBuilder.showTab('visual')">Визуальный конструктор</button>
+                        <button class="strat-tab" onclick="strategyBuilder.showTab('code')">Редактор кода</button>
+                        <button class="strat-tab" onclick="strategyBuilder.showTab('docs')">Документация API</button>
                     </div>
                     <div class="strat-tab-content active" id="stratTabVisual"><div class="visual-builder" id="visualBuilder"><div class="vb-hint">Add conditions from the left panel to build your strategy visually</div></div></div>
                     <div class="strat-tab-content" id="stratTabCode">
@@ -398,7 +398,7 @@
         </div>
         <!-- AI STRATEGY -->
         <div class="panel" id="panel-ai-strategy">
-            <div class="panel-header"><h2>🤖 AI Strategy Generator</h2>
+            <div class="panel-header"><h2>🤖 AI генератор стратегий</h2>
                 <div class="panel-controls" style="display:flex;gap:8px;align-items:center">
                     <span id="aiActiveProvider" style="font-size:12px;color:var(--text2);background:var(--bg3);padding:4px 10px;border-radius:6px;border:1px solid var(--border)">🆓 OpenRouter Free — Llama 4 Maverick</span>
                     <button class="ctrl-btn sm" onclick="app.showPanel('llm-settings');llmSettings.init()">⚙ Сменить</button>
@@ -442,7 +442,7 @@
         </div>
         <!-- DATABASE -->
         <div class="panel" id="panel-database">
-            <div class="panel-header"><h2>🗄 Database</h2><div class="panel-controls"><button class="ctrl-btn" onclick="db.refresh()">↻ Refresh</button><button class="ctrl-btn primary" onclick="db.openQuery()">SQL Query</button></div></div>
+            <div class="panel-header"><h2>🗄 База данных</h2><div class="panel-controls"><button class="ctrl-btn" onclick="db.refresh()">↻ Refresh</button><button class="ctrl-btn primary" onclick="db.openQuery()">SQL Query</button></div></div>
             <div class="db-layout">
                 <div class="db-sidebar">
                     <div class="config-title">Tables</div>
@@ -469,32 +469,32 @@
         </div>
         <!-- DATA COLLECTOR -->
         <div class="panel" id="panel-scraper">
-            <div class="panel-header"><h2>🕷 Data Collector</h2></div>
+            <div class="panel-header"><h2>🕷 Сборщик данных</h2></div>
             <div class="scraper-layout">
                 <div class="sources-grid" id="sourcesGrid"></div>
-                <div class="collection-log"><div class="config-title">Collection Log</div><div class="log-output" id="scraperLog"><div class="log-line info">[System] Data Collector ready.</div></div></div>
+                <div class="collection-log"><div class="config-title">Журнал сбора</div><div class="log-output" id="scraperLog"><div class="log-line info">[Система] Сборщик данных готов.</div></div></div>
             </div>
         </div>
         <!-- STATS -->
         <div class="panel" id="panel-stats">
-            <div class="panel-header"><h2>📊 Statistics Engine</h2></div>
+            <div class="panel-header"><h2>📊 Статистика</h2></div>
             <div class="stats-layout">
                 <div class="stats-filters">
-                    <select class="ctrl-select" id="statsLeague" onchange="statsEngine.load()"><option value="epl">EPL</option><option value="laliga">La Liga</option><option value="bundesliga">Bundesliga</option><option value="seriea">Serie A</option></select>
+                    <select class="ctrl-select" id="statsLeague" onchange="statsEngine.load()"><option value="epl">АПЛ</option><option value="laliga">Ла Лига</option><option value="bundesliga">Бундеслига</option><option value="seriea">Серия А</option></select>
                     <select class="ctrl-select" id="statsSeason" onchange="statsEngine.load()"><option value="2024">2024/25</option><option value="2023">2023/24</option><option value="2022">2022/23</option></select>
-                    <select class="ctrl-select" id="statsMetric" onchange="statsEngine.load()"><option value="goals">Goals</option><option value="xg">xG</option><option value="shots">Shots</option><option value="corners">Corners</option></select>
+                    <select class="ctrl-select" id="statsMetric" onchange="statsEngine.load()"><option value="goals">Голы</option><option value="xg">xG</option><option value="shots">Удары</option><option value="corners">Угловые</option></select>
                 </div>
                 <div class="stats-grid">
-                    <div class="chart-card large"><div class="chart-card-header"><span>League Advanced Stats Table</span></div><div id="statsLeagueTable" class="data-table-container"></div></div>
-                    <div class="chart-card"><div class="chart-card-header"><span>Goals Distribution</span></div><canvas id="chartStatsGoals" height="200"></canvas></div>
-                    <div class="chart-card"><div class="chart-card-header"><span>Home vs Away</span></div><canvas id="chartStatsHomeAway" height="200"></canvas></div>
-                    <div class="chart-card"><div class="chart-card-header"><span>xG vs Actual</span></div><canvas id="chartStatsXG" height="200"></canvas></div>
+                    <div class="chart-card large"><div class="chart-card-header"><span>Продвинутая статистика лиги</span></div><div id="statsLeagueTable" class="data-table-container"></div></div>
+                    <div class="chart-card"><div class="chart-card-header"><span>Распределение голов</span></div><canvas id="chartStatsGoals" height="200"></canvas></div>
+                    <div class="chart-card"><div class="chart-card-header"><span>Хозяева против гостей</span></div><canvas id="chartStatsHomeAway" height="200"></canvas></div>
+                    <div class="chart-card"><div class="chart-card-header"><span>xG против реального</span></div><canvas id="chartStatsXG" height="200"></canvas></div>
                 </div>
             </div>
         </div>
         <!-- VALUE FINDER -->
         <div class="panel" id="panel-value">
-            <div class="panel-header"><h2>💎 Value Finder</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="valueFinder.scan()">🔍 Scan Markets</button></div></div>
+            <div class="panel-header"><h2>💎 Поиск ценных ставок</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="valueFinder.scan()">🔍 Сканировать рынки</button></div></div>
             <div class="value-layout">
                 <div class="value-filters">
                     <div class="config-row"><label>Min Edge %</label><input type="number" class="ctrl-input" id="vfMinEdge" value="3" step="0.5"></div>
@@ -507,50 +507,50 @@
         </div>
         <!-- WALK FORWARD -->
         <div class="panel" id="panel-walkforward">
-            <div class="panel-header"><h2>🔄 Walk-Forward Analysis</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="walkForward.run()">▶ Run</button></div></div>
+            <div class="panel-header"><h2>🔄 Walk-Forward анализ</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="walkForward.run()">▶ Запустить</button></div></div>
             <div class="wf-layout">
                 <div class="wf-config">
-                    <div class="config-section"><div class="config-title">Settings</div>
-                        <div class="config-row"><label>In-Sample %</label><input type="number" class="ctrl-input" id="wfInSample" value="70"></div>
-                        <div class="config-row"><label>Windows</label><input type="number" class="ctrl-input" id="wfWindows" value="5"></div>
-                        <div class="config-row"><label>Anchored</label><label class="toggle-switch"><input type="checkbox" id="wfAnchored"><span class="toggle-slider"></span></label></div>
+                    <div class="config-section"><div class="config-title">Настройки</div>
+                        <div class="config-row"><label>Обучающая выборка %</label><input type="number" class="ctrl-input" id="wfInSample" value="70"></div>
+                        <div class="config-row"><label>Окна</label><input type="number" class="ctrl-input" id="wfWindows" value="5"></div>
+                        <div class="config-row"><label>Закреплённое</label><label class="toggle-switch"><input type="checkbox" id="wfAnchored"><span class="toggle-slider"></span></label></div>
                     </div>
                 </div>
                 <div class="wf-results">
-                    <div class="chart-card large"><div class="chart-card-header"><span>Walk-Forward Windows</span></div><canvas id="chartWFWindows" height="280"></canvas></div>
+                    <div class="chart-card large"><div class="chart-card-header"><span>Окна Walk-Forward</span></div><canvas id="chartWFWindows" height="280"></canvas></div>
                     <div id="wfResultsTable" class="data-table-container"></div>
                 </div>
             </div>
         </div>
         <!-- LIBRARY -->
         <div class="panel" id="panel-library">
-            <div class="panel-header"><h2>📚 Strategy Library</h2>
+            <div class="panel-header"><h2>📚 Библиотека стратегий</h2>
                 <div class="panel-controls">
-                    <input type="text" class="ctrl-input" id="libSearch" placeholder="Search..." oninput="library.search(this.value)">
-                    <select class="ctrl-select" id="libFilter"><option value="all">All</option><option value="mine">My Strategies</option><option value="top">Top Rated</option></select>
+                    <input type="text" class="ctrl-input" id="libSearch" placeholder="Поиск..." oninput="library.search(this.value)">
+                    <select class="ctrl-select" id="libFilter"><option value="all">Все</option><option value="mine">Мои стратегии</option><option value="top">Топ рейтинг</option></select>
                 </div>
             </div>
             <div class="library-grid" id="libraryGrid"></div>
         </div>
         <!-- ALERTS -->
         <div class="panel" id="panel-alerts">
-            <div class="panel-header"><h2>🔔 Alerts</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="alerts.createAlert()">+ New Alert</button></div></div>
+            <div class="panel-header"><h2>🔔 Алерты</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="alerts.createAlert()">+ Новый алерт</button></div></div>
             <div class="alerts-layout"><div class="alerts-list" id="alertsList"></div></div>
         </div>
         <!-- JOURNAL -->
         <div class="panel" id="panel-journal">
-            <div class="panel-header"><h2>📓 Bet Journal</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="journal.addBet()">+ Add Bet</button><button class="ctrl-btn" onclick="journal.export()">↓ Export</button></div></div>
+            <div class="panel-header"><h2>📓 Журнал ставок</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="journal.addBet()">+ Добавить ставку</button><button class="ctrl-btn" onclick="journal.export()">↓ Экспорт</button></div></div>
             <div class="journal-layout">
                 <div class="journal-filters">
                     <input type="date" class="ctrl-input" id="journalFrom">
                     <input type="date" class="ctrl-input" id="journalTo">
-                    <select class="ctrl-select" id="journalSport"><option value="">All Sports</option></select>
-                    <select class="ctrl-select" id="journalResult"><option value="">All</option><option value="win">Win</option><option value="loss">Loss</option></select>
+                    <select class="ctrl-select" id="journalSport"><option value="">Все виды спорта</option></select>
+                    <select class="ctrl-select" id="journalResult"><option value="">Все</option><option value="win">Победа</option><option value="loss">Поражение</option></select>
                 </div>
                 <div class="journal-stats-row">
-                    <div class="j-stat"><span class="j-label">Total</span><span id="jTotal">—</span></div>
-                    <div class="j-stat"><span class="j-label">Won</span><span id="jWon" class="positive">—</span></div>
-                    <div class="j-stat"><span class="j-label">Lost</span><span id="jLost" class="negative">—</span></div>
+                    <div class="j-stat"><span class="j-label">Всего</span><span id="jTotal">—</span></div>
+                    <div class="j-stat"><span class="j-label">Победы</span><span id="jWon" class="positive">—</span></div>
+                    <div class="j-stat"><span class="j-label">Поражения</span><span id="jLost" class="negative">—</span></div>
                     <div class="j-stat"><span class="j-label">P&L</span><span id="jPL">—</span></div>
                     <div class="j-stat"><span class="j-label">ROI</span><span id="jROI">—</span></div>
                 </div>
@@ -839,11 +839,15 @@
   </div>
 
   <button class="ctrl-btn primary" onclick="app.saveSettings()">&#x1F4BE; Save Settings</button>
+  <div class="config-row" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+    <label style="color:var(--text2);font-size:12px;min-width:120px">Режим данных</label>
+    <div id="settingsDemoRow"></div>
+  </div>
 </div>
 </div>
 </div>
 <!-- Add Bet Modal -->
-<div class="modal" id="addBetModal" style="display:none"><div class="modal-content"><div class="modal-header"><span>+ Add Bet</span><button onclick="document.getElementById('addBetModal').style.display='none'">×</button></div><div class="settings-body"><div class="config-row"><label>Date</label><input type="date" class="ctrl-input" id="betDate"></div><div class="config-row"><label>Sport</label><select class="ctrl-select" id="betSport"><option>Football</option><option>Tennis</option><option>Basketball</option></select></div><div class="config-row"><label>Match</label><input type="text" class="ctrl-input" id="betMatch" placeholder="Home vs Away"></div><div class="config-row"><label>Market</label><input type="text" class="ctrl-input" id="betMarket" placeholder="1X2, O/U 2.5..."></div><div class="config-row"><label>Bet</label><input type="text" class="ctrl-input" id="betSelection" placeholder="Home / Over / ..."></div><div class="config-row"><label>Odds</label><input type="number" class="ctrl-input" id="betOdds" step="0.01"></div><div class="config-row"><label>Stake</label><input type="number" class="ctrl-input" id="betStake"></div><div class="config-row"><label>Result</label><select class="ctrl-select" id="betResult"><option value="pending">Pending</option><option value="win">Win</option><option value="loss">Loss</option><option value="void">Void</option></select></div><button class="ctrl-btn primary" onclick="journal.saveBet()">Save Bet</button></div></div></div>
+<div class="modal" id="addBetModal" style="display:none"><div class="modal-content"><div class="modal-header"><span>+ Добавить ставку</span><button onclick="document.getElementById('addBetModal').style.display='none'">×</button></div><div class="settings-body"><div class="config-row"><label>Date</label><input type="date" class="ctrl-input" id="betDate"></div><div class="config-row"><label>Sport</label><select class="ctrl-select" id="betSport"><option>Football</option><option>Tennis</option><option>Basketball</option></select></div><div class="config-row"><label>Match</label><input type="text" class="ctrl-input" id="betMatch" placeholder="Хозяева против гостей"></div><div class="config-row"><label>Market</label><input type="text" class="ctrl-input" id="betMarket" placeholder="1X2, O/U 2.5..."></div><div class="config-row"><label>Bet</label><input type="text" class="ctrl-input" id="betSelection" placeholder="Home / Over / ..."></div><div class="config-row"><label>Odds</label><input type="number" class="ctrl-input" id="betOdds" step="0.01"></div><div class="config-row"><label>Stake</label><input type="number" class="ctrl-input" id="betStake"></div><div class="config-row"><label>Result</label><select class="ctrl-select" id="betResult"><option value="pending">Pending</option><option value="win">Win</option><option value="loss">Поражение</option><option value="void">Void</option></select></div><button class="ctrl-btn primary" onclick="journal.saveBet()">Save Bet</button></div></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script>

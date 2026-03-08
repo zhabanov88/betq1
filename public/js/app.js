@@ -23,6 +23,28 @@ const app = {
   currentSport: 'football',
   currentPanel: 'dashboard',
   settings: {},
+
+  _renderDemoToggle() {
+    const container = document.getElementById('settingsDemoRow');
+    if (!container) return;
+    const enabled = localStorage.getItem('bq_demo_mode') === 'true';
+    container.innerHTML = `
+      <label class="toggle-switch" style="gap:10px;display:flex;align-items:center;cursor:pointer">
+        <input type="checkbox" id="demoModeToggle" ${enabled ? 'checked' : ''} onchange="app.toggleDemoMode(this.checked)">
+        <span class="toggle-slider"></span>
+        <span style="font-size:12px;color:var(--text2)">Тестовые данные <span style="color:var(--text3)">(генерировать синтетические данные для всех разделов)</span></span>
+      </label>`;
+  },
+  
+  toggleDemoMode(enabled) {
+    localStorage.setItem('bq_demo_mode', enabled ? 'true' : 'false');
+    // Обновить текущую панель
+    if (this.currentPanel === 'dashboard') dashboard.refresh();
+    if (this.currentPanel === 'journal')   journal.load();
+    if (this.currentPanel === 'alerts')    alerts.load();
+    if (this.currentPanel === 'database')  db.refresh();
+    if (this.currentPanel === 'clv')       typeof clvTracker !== 'undefined' && clvTracker.init();
+  },
   
   init() {
     this.settings = JSON.parse(localStorage.getItem('bq_settings') || '{}');
@@ -158,6 +180,8 @@ showPanel(name) {
       const el = document.getElementById(id);
       if (el) el.value = s[key] || '';
     });
+
+    this._renderDemoToggle();
   },
 
   // Called when provider changes inside Settings modal
