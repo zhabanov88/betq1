@@ -1,35 +1,32 @@
 'use strict';
 // ═══════════════════════════════════════════════════════════════════════════
 //  BetQuant Pro — Live Monitor
-//  Лайв-матчи · in-play коэффициенты · нейросетевые сигналы
+//  Реальные данные из API-Football. Демо — только при bq_demo_mode=true.
 // ═══════════════════════════════════════════════════════════════════════════
 const liveMonitor = {
   matches:    [],
   selectedId: null,
   oddsChart:  null,
   timer:      null,
+  _hint:      null,
+  _source:    'none',
   POLL: 30000,
 
-  // ── lifecycle ─────────────────────────────────────────────────────────────
-  async init() {
-    await this.loadMatches();
-    this.startPoll();
-  },
-  destroy() {
-    this.stopPoll();
-    if (this.oddsChart) { try { this.oddsChart.destroy(); } catch(e){} this.oddsChart = null; }
-  },
+  async init() { await this.loadMatches(); this.startPoll(); },
+  destroy()    { this.stopPoll(); if (this.oddsChart) { try { this.oddsChart.destroy(); } catch(e){} this.oddsChart = null; } },
+  startPoll()  { this.stopPoll(); this.timer = setInterval(() => this.loadMatches(true), this.POLL); },
+  stopPoll()   { clearInterval(this.timer); this.timer = null; },
 
-  startPoll() { this.stopPoll(); this.timer = setInterval(() => this.loadMatches(true), this.POLL); },
-  stopPoll()  { clearInterval(this.timer); this.timer = null; },
-
-  // ── data ──────────────────────────────────────────────────────────────────
   async loadMatches(silent = false) {
     if (!silent) this._loading('lm-grid-loading', true);
     try {
-      const d = await this._fetch('/api/live/matches');
+      const isDemoMode = localStorage.getItem('bq_demo_mode') === 'true';
+      const url = isDemoMode ? '/api/live/matches?demo=true' : '/api/live/matches';
+      const d   = await this._fetch(url);
       if (!d) return;
       this.matches = d.matches || [];
+      this._hint   = d.hint   || null;
+      this._source = d.source || 'none';
       this.renderGrid();
       this._liveBadge(d.liveCount || 0);
       if (this.selectedId) this.selectMatch(this.selectedId, true);
@@ -51,12 +48,29 @@ const liveMonitor = {
     finally    { this._loading('lm-detail-loading', false); }
   },
 
-  // ── grid ──────────────────────────────────────────────────────────────────
   renderGrid() {
     const live  = this.matches.filter(m => m.status === 'live');
     const sched = this.matches.filter(m => m.status === 'scheduled');
     const lEl   = document.getElementById('lm-live-grid');
     const sEl   = document.getElementById('lm-sched-grid');
+
+    if (!this.matches.length) {
+      const noDataHtml = `<div style="padding:48px;text-align:center">
+        <div style="font-size:36px;margin-bottom:12px">📭</div>
+        <div style="color:var(--text2);margin-bottom:8px">Нет данных о матчах</div>
+        <div style="color:var(--text3);font-size:12px;line-height:1.7">
+          ${this._hint || 'Добавьте <strong>API_FOOTBALL_KEY</strong> в .env для получения лайв-данных.<br>Или включите <strong>Тестовые данные</strong> в настройках.'}
+        </div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:16px">
+          <button class="ctrl-btn" onclick="liveMonitor.loadMatches()">🔄 Обновить</button>
+          <a href="https://www.api-football.com" target="_blank" class="ctrl-btn">🔑 Получить ключ</a>
+        </div>
+      </div>`;
+      if (lEl) lEl.innerHTML = noDataHtml;
+      if (sEl) sEl.innerHTML = '';
+      return;
+    }
+
     if (lEl) lEl.innerHTML = live.length  ? live.map(m  => this._card(m)).join('')  : '<div class="lm-empty">Нет активных матчей</div>';
     if (sEl) sEl.innerHTML = sched.length ? sched.map(m => this._card(m)).join('') : '<div class="lm-empty">Нет запланированных</div>';
   },
@@ -71,26 +85,22 @@ const liveMonitor = {
     <div class="lm-card ${sel}" data-id="${m.id}" onclick="liveMonitor.selectMatch('${m.id}')">
       <div class="lm-card-head">
         <span class="lm-league-tag">${m.league}</span>
-        ${live
-          ? `<span class="lm-min-badge live">${m.minute}'</span><span class="lm-live-dot"></span>`
-          : `<span class="lm-min-badge">${this._fmtTime(m.startTime)}</span>`}
+        ${live ? `<span class="lm-min-badge live">${m.minute}'</span><span class="lm-live-dot"></span>` : `<span class="lm-min-badge">${this._fmtTime(m.startTime)}</span>`}
       </div>
       <div class="lm-card-teams">
         <span class="lm-team">${m.home}</span>
-        <span class="lm-score">${live ? `${m.homeScore ?? 0} : ${m.awayScore ?? 0}` : 'vs'}</span>
+        <span class="lm-score">${live ? `${m.homeScore??0} : ${m.awayScore??0}` : 'vs'}</span>
         <span class="lm-team right">${m.away}</span>
       </div>
       ${oddH ? `<div class="lm-card-odds">${oddH}${oddD}${oddA}</div>` : ''}
     </div>`;
   },
 
-  // ── detail ────────────────────────────────────────────────────────────────
   renderDetail(m, oddsHistory) {
     const el = document.getElementById('lm-detail');
     if (!el) return;
     const live = m.status === 'live';
     const s = m.stats || {};
-
     el.innerHTML = `
       <div class="lm-det-header">
         <div class="lm-det-meta">
@@ -104,73 +114,54 @@ const liveMonitor = {
         </div>
         <div class="lm-det-odds">${this._oddsRow(m.odds, m.openOdds)}</div>
       </div>
-
       ${live ? this._statsSection(s) : ''}
-
       <div class="lm-section">
         <div class="lm-sec-title">📈 Движение коэффициентов</div>
         <div style="position:relative;height:180px"><canvas id="lm-odds-cvs"></canvas></div>
       </div>
-
       ${m.signal?.signals?.length ? this._signalSection(m.signal) : ''}
-
-      <div class="lm-section">
-        <div class="lm-sec-title">📋 События</div>
-        <div class="lm-events">${this._events(m.events || [])}</div>
-      </div>`;
-
-    setTimeout(() => {
-      this._initChart();
-      this._updateChart(oddsHistory);
-    }, 40);
+      ${m.events?.length ? `<div class="lm-section"><div class="lm-sec-title">📋 События</div><div class="lm-events">${this._events(m.events)}</div></div>` : ''}
+    `;
+    this._initChart();
+    if (oddsHistory?.length) this._updateChart(oddsHistory);
   },
 
-  _oddsRow(odds, open) {
+  _oddsRow(odds, openOdds) {
     if (!odds) return '';
-    return [
-      { k: 'home', l: '1' }, { k: 'draw', l: 'X' }, { k: 'away', l: '2' }
-    ].filter(x => odds[x.k]).map(x => {
-      const cur  = +odds[x.k], op = open?.[x.k] ? +open[x.k] : null;
-      const diff = op ? cur - op : 0;
-      const cls  = diff < -.1 ? 'down' : diff > .1 ? 'up' : '';
-      const arr  = diff < -.1 ? '▼' : diff > .1 ? '▲' : '';
-      return `<div class="lm-odds-chip ${cls}">
-        <span class="lm-odds-lbl">${x.l}</span>
-        <span class="lm-odds-val">${cur.toFixed(2)}</span>
-        ${arr ? `<span class="lm-odds-arr">${arr}</span>` : ''}
-      </div>`;
-    }).join('');
+    const mkts = [['home','1'],['draw','X'],['away','2']];
+    return `<div style="display:flex;gap:12px;justify-content:center">
+      ${mkts.map(([k,l]) => !odds[k] ? '' : `<div style="text-align:center">
+        <div style="font-size:10px;color:var(--text3)">${l}</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent)">${(+odds[k]).toFixed(2)}</div>
+        ${openOdds?.[k] ? `<div style="font-size:10px;color:var(--text3)">Откр: ${(+openOdds[k]).toFixed(2)}</div>` : ''}
+      </div>`).join('')}
+    </div>`;
   },
 
   _statsSection(s) {
-    const bar = (hv, av, lbl) => {
-      const tot = ((+hv || 0) + (+av || 0)) || 1;
-      const hp  = Math.round((+hv || 0) / tot * 100);
-      return `<div class="lm-stat-row">
-        <span class="lm-sval home">${hv ?? '—'}</span>
-        <div class="lm-sbar"><div class="lm-sfill h" style="width:${hp}%"></div><div class="lm-sfill a" style="width:${100-hp}%"></div></div>
-        <span class="lm-slbl">${lbl}</span>
-        <span class="lm-sval away">${av ?? '—'}</span>
-      </div>`;
-    };
-    return `<div class="lm-section">
-      <div class="lm-sec-title">📊 Статистика</div>
-      <div class="lm-stats">
-        ${bar(s.home_sot,     s.away_sot,     'Удары в цель')}
-        ${bar(s.home_shots,   s.away_shots,   'Удары всего')}
-        ${bar(s.home_poss,    s.away_poss,    'Владение %')}
-        ${bar(s.home_corners, s.away_corners, 'Угловые')}
-        ${bar(s.home_da,      s.away_da,      'Опасные атаки')}
-        ${bar((s.home_xg||0).toFixed(2), (s.away_xg||0).toFixed(2), 'xG')}
-      </div>
+    if (!Object.keys(s).length) return '';
+    const row = (label, h, a) => `<div class="lm-stat-row">
+      <span class="lm-stat-val home">${h}</span>
+      <span class="lm-stat-label">${label}</span>
+      <span class="lm-stat-val away">${a}</span>
+    </div>`;
+    return `<div class="lm-section lm-stats">
+      <div class="lm-sec-title">📊 Статистика матча</div>
+      ${row('Удары', s.home_shots||0, s.away_shots||0)}
+      ${row('В створ', s.home_sot||0, s.away_sot||0)}
+      ${row('Владение %', s.home_poss||0, s.away_poss||0)}
+      ${row('Угловые', s.home_corners||0, s.away_corners||0)}
+      ${row('xG', (s.home_xg||0).toFixed(2), (s.away_xg||0).toFixed(2))}
+      ${row('Опасные атаки', s.home_da||0, s.away_da||0)}
     </div>`;
   },
 
   _signalSection(sig) {
+    if (!sig?.signals?.length) return '';
     return `<div class="lm-section lm-signals">
-      <div class="lm-sec-title">🧠 In-Play Сигналы</div>
-      ${sig.signals.map((s, i) => `
-        <div class="lm-signal-card ${i === 0 ? 'top' : ''}">
+      <div class="lm-sec-title">💡 Сигналы (${sig.signals.length})</div>
+      ${sig.signals.slice(0,3).map(s => `
+        <div class="lm-signal-card ${s.confidence >= 70 ? 'top' : ''}">
           <div class="lm-sig-head">
             <span class="lm-sig-label">${s.label}</span>
             <span class="lm-conf ${s.confidence >= 70 ? 'hi' : s.confidence >= 55 ? 'md' : 'lo'}">${s.confidence.toFixed(0)}%</span>
@@ -196,16 +187,14 @@ const liveMonitor = {
     return events.slice().reverse().map(e => `
       <div class="lm-event ${e.team}">
         <span class="lm-ev-min">${e.minute}'</span>
-        <span class="lm-ev-ico">${ICON[e.type] || '•'}</span>
-        <span class="lm-ev-txt">
-          <strong>${e.player || ''}</strong>
+        <span class="lm-ev-ico">${ICON[e.type]||'•'}</span>
+        <span class="lm-ev-txt"><strong>${e.player||''}</strong>
           ${e.assist ? `<span class="lm-assist">(${e.assist})</span>` : ''}
           ${e.score  ? `<span class="lm-ev-score">${e.score}</span>` : ''}
         </span>
       </div>`).join('');
   },
 
-  // ── odds chart ────────────────────────────────────────────────────────────
   _initChart() {
     const cvs = document.getElementById('lm-odds-cvs');
     if (!cvs) return;
@@ -219,55 +208,44 @@ const liveMonitor = {
         { label:'X (Ничья)',   data:[], borderColor:'#ffd740', borderWidth:2, pointRadius:2, tension:.3, fill:false },
         { label:'2 (Гости)',   data:[], borderColor:'#ff4560', borderWidth:2, pointRadius:2, tension:.3, fill:false },
       ]},
-      options: {
-        responsive:true, maintainAspectRatio:false, animation:false,
-        plugins:{ legend:{ labels:{ color:tc, font:{size:11} }}, tooltip:{ mode:'index', intersect:false }},
-        scales:{ x:{ ticks:{color:tc,font:{size:10},maxTicksLimit:10}, grid:{color:gc} },
-                 y:{ ticks:{color:tc,font:{size:10}}, grid:{color:gc} }},
-      },
+      options: { responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{ legend:{labels:{color:tc,font:{size:11}}}, tooltip:{mode:'index',intersect:false} },
+        scales:{ x:{ticks:{color:tc,font:{size:10},maxTicksLimit:10},grid:{color:gc}}, y:{ticks:{color:tc,font:{size:10}},grid:{color:gc}} } },
     });
   },
 
   _updateChart(history) {
     if (!this.oddsChart || !history?.length) return;
-    this.oddsChart.data.labels           = history.map(h => h.phase === 'live' ? `${h.minute}'` : this._fmtTime(h.t, true));
+    this.oddsChart.data.labels           = history.map(h => h.phase==='live' ? `${h.minute}'` : this._fmtTime(h.t, true));
     this.oddsChart.data.datasets[0].data = history.map(h => h.home);
     this.oddsChart.data.datasets[1].data = history.map(h => h.draw);
     this.oddsChart.data.datasets[2].data = history.map(h => h.away);
     this.oddsChart.update('none');
   },
 
-  // ── CLV quick-add ─────────────────────────────────────────────────────────
   async addCLV(matchId, market, odds) {
     const m = this.matches.find(x => x.id === matchId);
     if (!m) return;
-    await this._fetch('/api/clv/bet', 'POST', {
-      matchName: `${m.home} vs ${m.away}`, market, betOdds: odds, stake: 10,
-    });
+    await this._fetch('/api/clv/bet', 'POST', { matchName:`${m.home} vs ${m.away}`, market, betOdds:odds, stake:10 });
     this._toast(`✅ Добавлено в CLV: ${market} @ ${(+odds).toFixed(2)}`);
   },
 
-  // ── utils ─────────────────────────────────────────────────────────────────
   _fmtTime(iso, short = false) {
     if (!iso) return '—';
     return new Date(iso).toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
   },
   _liveBadge(n) {
     const b = document.querySelector('[data-panel="live"] .lm-badge');
-    if (b) { b.textContent = n || ''; b.style.display = n ? '' : 'none'; }
+    if (b) { b.textContent = n||''; b.style.display = n ? '' : 'none'; }
   },
-  _loading(id, on) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = on ? 'flex' : 'none';
-  },
+  _loading(id, on) { const el = document.getElementById(id); if (el) el.style.display = on ? 'flex' : 'none'; },
   _toast(msg) {
     let t = document.getElementById('bq-toast');
-    if (!t) { t = Object.assign(document.createElement('div'), { id:'bq-toast', className:'bq-toast' }); document.body.append(t); }
-    t.textContent = msg; t.classList.add('show');
-    clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 3000);
+    if (!t) { t = Object.assign(document.createElement('div'),{id:'bq-toast',className:'bq-toast'}); document.body.append(t); }
+    t.textContent=msg; t.classList.add('show'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),3000);
   },
-  async _fetch(url, method = 'GET', body = null) {
-    const opts = { method, headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('bq_token') || 'demo' } };
+  async _fetch(url, method='GET', body=null) {
+    const opts = { method, headers:{'Content-Type':'application/json','x-auth-token':localStorage.getItem('bq_token')||'demo'} };
     if (body) opts.body = JSON.stringify(body);
     const r = await fetch(url, opts);
     if (!r.ok) throw new Error(`${r.status}`);

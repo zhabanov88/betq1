@@ -477,6 +477,22 @@
         </div>
         <!-- STATS -->
         <div class="panel" id="panel-stats">
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+                <select class="ctrl-select" id="statsLeague" onchange="statsEngine.load()">
+                    <option value="epl">Premier League</option>
+                    <option value="bundesliga">Bundesliga</option>
+                    <option value="laliga">La Liga</option>
+                    <option value="seriea">Serie A</option>
+                    <option value="ligue1">Ligue 1</option>
+                </select>
+                <select class="ctrl-select" id="statsSeason" onchange="statsEngine.load()">
+                    <option value="">Все сезоны</option>
+                    <option value="2024">2024/25</option>
+                    <option value="2023">2023/24</option>
+                    <option value="2022">2022/23</option>
+                </select>
+                <button class="ctrl-btn" onclick="statsEngine.load()">🔄 Обновить</button>
+            </div>
             <div class="panel-header"><h2>📊 Статистика</h2></div>
             <div class="stats-layout">
                 <div class="stats-filters">

@@ -103,6 +103,13 @@ app.use('/api/live',  liveRoutes);
 app.use('/api/value', valueRoutes);
 app.use('/api/clv',   clvRoutes);
 
+// ── Stats routes (для "Графики и коэффициенты" + "Статистика") ───────────
+const statsRoutes = (() => {
+  try { return require('./stats_routes'); }
+  catch(e) { console.warn('⚠️  stats_routes missing:', e.message); return null; }
+})();
+if (statsRoutes) app.use('/api/stats', statsRoutes);
+
 
 // ── Priority 2: Telegram, Odds Compare ───────────────────────────────────
 // ВАЖНО: telegram лежит в server/telegram.js (НЕ routes/telegram.js!)

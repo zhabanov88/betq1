@@ -1,110 +1,22 @@
 'use strict';
 /**
- * BetQuant Pro — Odds Compare API  /api/odds-compare/*
- *
- * GET /api/odds-compare/fixtures    — список матчей с коэффициентами 8 букмекеров
- * GET /api/odds-compare/fixture/:id — детали одного матча
- * GET /api/odds-compare/arbitrage   — арбитражные ситуации
- * GET /api/odds-compare/movement/:id — история движения линий
- *
- * Источники:
- *  • Если задан ODDS_API_KEY → The Odds API (https://the-odds-api.com)
- *  • Иначе → встроенные demo-данные (всё работает без ключа)
+ * BetQuant Pro — Odds Compare  /api/odds-compare/*
+ * Реальные данные из The Odds API (ODDS_API_KEY).
+ * Demo — только при ?demo=true в запросе.
  */
-
 const express = require('express');
 const router  = express.Router();
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
+const CACHE_TTL    = 5 * 60 * 1000; // 5 минут
+const _cache = { fixtures: [], ts: 0, arb: [], arbTs: 0 };
 
-// ─── Cache ────────────────────────────────────────────────────────────────
-let _cache = { fixtures: [], ts: 0 };
-const CACHE_TTL = 5 * 60 * 1000; // 5 минут
-
-// ─── Demo data ────────────────────────────────────────────────────────────
-function demoFixtures() {
-  const now = Date.now();
-  const fwd = h => new Date(now + h * 3600000).toISOString();
-
-  const BOOKMAKERS = ['pinnacle','bet365','betfair','unibet','williamhill','bwin','1xbet','betway'];
-
-  function generateOdds(baseH, baseD, baseA) {
-    const result = {};
-    for (const bm of BOOKMAKERS) {
-      const n = () => 1 + (Math.random() - 0.5) * 0.18;
-      const h = +(baseH * n()).toFixed(2);
-      const d = +(baseD * n()).toFixed(2);
-      const a = +(baseA * n()).toFixed(2);
-      // Pinnacle — самые острые линии (минимальная маржа)
-      const margin = bm === 'pinnacle' ? 1.035 : bm === 'betfair' ? 1.04 : 1.06 + Math.random() * 0.04;
-      const o25 = +(1.80 * n() * (margin / 1.05)).toFixed(2);
-      const u25 = +(2.05 * n() * (margin / 1.05)).toFixed(2);
-      result[bm] = { home: h, draw: d, away: a, over25: o25, under25: u25 };
-    }
-    return result;
-  }
-
-  function detectArb(bookmakers) {
-    const bms = Object.entries(bookmakers);
-    let minSum = Infinity;
-    let bestLegs = [];
-
-    // 3-way arb: 1X2
-    const bestH = bms.reduce((b, [k,v]) => v.home > b.o ? { bm:k, o:v.home } : b, { bm:'', o:0 });
-    const bestD = bms.reduce((b, [k,v]) => v.draw > b.o ? { bm:k, o:v.draw } : b, { bm:'', o:0 });
-    const bestA = bms.reduce((b, [k,v]) => v.away > b.o ? { bm:k, o:v.away } : b, { bm:'', o:0 });
-
-    const sumInv = 1/bestH.o + 1/bestD.o + 1/bestA.o;
-    if (sumInv < 1) {
-      bestLegs = [
-        { outcome:'home', bm: bestH.bm, odds: bestH.o, stake: +(100 / bestH.o / sumInv).toFixed(2) },
-        { outcome:'draw', bm: bestD.bm, odds: bestD.o, stake: +(100 / bestD.o / sumInv).toFixed(2) },
-        { outcome:'away', bm: bestA.bm, odds: bestA.o, stake: +(100 / bestA.o / sumInv).toFixed(2) },
-      ];
-      return { possible: true, profit: +((1/sumInv - 1) * 100).toFixed(2), legs: bestLegs };
-    }
-    return { possible: false };
-  }
-
-  const fixtures = [
-    { id:'oc1', league:'Premier League', home:'Arsenal',       away:'Chelsea',        baseH:1.85, baseD:3.50, baseA:4.20, hours:2 },
-    { id:'oc2', league:'Premier League', home:'Liverpool',     away:'Man City',       baseH:2.20, baseD:3.30, baseA:3.20, hours:5 },
-    { id:'oc3', league:'La Liga',        home:'Real Madrid',   away:'Barcelona',      baseH:2.10, baseD:3.40, baseA:3.50, hours:6 },
-    { id:'oc4', league:'Bundesliga',     home:'Bayern Munich', away:'Dortmund',       baseH:1.55, baseD:4.20, baseA:6.50, hours:3 },
-    { id:'oc5', league:'Serie A',        home:'Inter Milan',   away:'AC Milan',       baseH:2.30, baseD:3.10, baseA:3.20, hours:8 },
-    { id:'oc6', league:'La Liga',        home:'Atletico',      away:'Sevilla',        baseH:1.90, baseD:3.40, baseA:4.10, hours:9 },
-    { id:'oc7', league:'Champions League', home:'PSG',         away:'Manchester City',baseH:2.60, baseD:3.20, baseA:2.80, hours:26 },
-    { id:'oc8', league:'Premier League', home:'Tottenham',     away:'Newcastle',      baseH:2.00, baseD:3.30, baseA:3.80, hours:4 },
-  ];
-
-  return fixtures.map(f => {
-    const bookmakers = generateOdds(f.baseH, f.baseD, f.baseA);
-    const arb        = detectArb(bookmakers);
-    return {
-      id:         f.id,
-      league:     f.league,
-      home:       f.home,
-      away:       f.away,
-      startTime:  fwd(f.hours),
-      status:     'scheduled',
-      bookmakers,
-      arb,
-      bestOdds: {
-        home: Math.max(...Object.values(bookmakers).map(b => b.home)),
-        draw: Math.max(...Object.values(bookmakers).map(b => b.draw)),
-        away: Math.max(...Object.values(bookmakers).map(b => b.away)),
-      },
-    };
-  });
-}
-
-// ─── The Odds API integration ─────────────────────────────────────────────
-async function fetchFromOddsAPI() {
+async function fetchOddsAPI() {
   if (!ODDS_API_KEY) return null;
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const t    = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
   try {
-    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const t    = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
-    const r    = await fetch(
+    const r = await fetch(
       `https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?apiKey=${ODDS_API_KEY}&regions=eu&markets=h2h,totals&oddsFormat=decimal`,
       { signal: ctrl?.signal }
     );
@@ -112,20 +24,31 @@ async function fetchFromOddsAPI() {
     if (!r.ok) throw new Error(`Odds API ${r.status}`);
     const data = await r.json();
     if (!Array.isArray(data) || !data.length) return null;
-
-    return data.slice(0, 10).map((g, i) => {
+    return data.slice(0, 12).map(g => {
       const bookmakers = {};
       for (const bm of (g.bookmakers || [])) {
-        const h2h     = bm.markets?.find(m => m.key === 'h2h');
-        const totals  = bm.markets?.find(m => m.key === 'totals');
+        const h2h    = bm.markets?.find(m => m.key === 'h2h');
+        const totals = bm.markets?.find(m => m.key === 'totals');
         if (!h2h) continue;
-        const home = h2h.outcomes.find(o => o.name === g.home_team)?.price || 0;
-        const away = h2h.outcomes.find(o => o.name === g.away_team)?.price || 0;
-        const draw = h2h.outcomes.find(o => o.name === 'Draw')?.price     || 0;
-        const over = totals?.outcomes.find(o => o.name === 'Over')?.price  || 0;
-        const under= totals?.outcomes.find(o => o.name === 'Under')?.price || 0;
-        bookmakers[bm.key] = { home, draw, away, over25: over, under25: under };
+        bookmakers[bm.key] = {
+          home:   h2h.outcomes.find(o => o.name === g.home_team)?.price || 0,
+          draw:   h2h.outcomes.find(o => o.name === 'Draw')?.price      || 0,
+          away:   h2h.outcomes.find(o => o.name === g.away_team)?.price || 0,
+          over25: totals?.outcomes.find(o => o.name === 'Over')?.price  || 0,
+          under25:totals?.outcomes.find(o => o.name === 'Under')?.price || 0,
+        };
       }
+      const bms = Object.values(bookmakers);
+      const bestOdds = {
+        home: bms.length ? Math.max(0, ...bms.map(b => b.home || 0)) : 0,
+        draw: bms.length ? Math.max(0, ...bms.map(b => b.draw || 0)) : 0,
+        away: bms.length ? Math.max(0, ...bms.map(b => b.away || 0)) : 0,
+      };
+      const margin = bms.length ? Object.values(bookmakers).reduce((sum, b) => {
+        const m = (b.home>0?1/b.home:0)+(b.draw>0?1/b.draw:0)+(b.away>0?1/b.away:0);
+        return sum + m;
+      }, 0) / bms.length : 0;
+
       return {
         id:        `api_${g.id}`,
         league:    g.sport_title || 'Football',
@@ -134,12 +57,8 @@ async function fetchFromOddsAPI() {
         startTime: g.commence_time,
         status:    'scheduled',
         bookmakers,
-        arb:       { possible: false },
-        bestOdds: {
-          home: Math.max(0, ...Object.values(bookmakers).map(b => b.home || 0)),
-          draw: Math.max(0, ...Object.values(bookmakers).map(b => b.draw || 0)),
-          away: Math.max(0, ...Object.values(bookmakers).map(b => b.away || 0)),
-        },
+        bestOdds,
+        arb: { possible: margin < 1, margin: +((margin - 1) * 100).toFixed(2) },
       };
     });
   } catch(e) {
@@ -148,31 +67,96 @@ async function fetchFromOddsAPI() {
   }
 }
 
-// ─── Refresh cache ────────────────────────────────────────────────────────
-async function getFixtures() {
-  if (Date.now() - _cache.ts < CACHE_TTL && _cache.fixtures.length) {
-    return _cache.fixtures;
-  }
-  const live = await fetchFromOddsAPI();
-  _cache.fixtures = live || demoFixtures();
-  _cache.ts       = Date.now();
-  return _cache.fixtures;
+function demoFixtures() {
+  const teams = [['Арсенал','Челси'],['Бавария','Дортмунд'],['Реал','Барселона'],['ПСЖ','Монако'],['Интер','Ювентус']];
+  const leagues = ['Premier League','Bundesliga','La Liga','Ligue 1','Serie A'];
+  return teams.map(([home, away], i) => {
+    const bH = +(1.5 + Math.random()).toFixed(2);
+    const bD = +(3.0 + Math.random()*0.8).toFixed(2);
+    const bA = +(2.5 + Math.random()*1.5).toFixed(2);
+    return {
+      id: `demo_${i}`, league: leagues[i], home, away,
+      startTime: new Date(Date.now() + (i+1)*3600000).toISOString(),
+      status: 'scheduled',
+      bookmakers: {
+        'pinnacle':      { home:+(bH+0.05).toFixed(2), draw:+(bD-0.05).toFixed(2), away:+(bA+0.04).toFixed(2) },
+        'bet365':        { home:+(bH-0.05).toFixed(2), draw:+(bD+0.10).toFixed(2), away:+(bA-0.06).toFixed(2) },
+        'betfair':       { home:+(bH+0.12).toFixed(2), draw:+(bD+0.05).toFixed(2), away:+(bA+0.10).toFixed(2) },
+        'william_hill':  { home:+(bH-0.10).toFixed(2), draw:+(bD-0.08).toFixed(2), away:+(bA-0.05).toFixed(2) },
+      },
+      bestOdds: { home:+(bH+0.12).toFixed(2), draw:+(bD+0.10).toFixed(2), away:+(bA+0.10).toFixed(2) },
+      arb: { possible: false },
+    };
+  });
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────
+async function getFixtures(useDemo = false) {
+  if (Date.now() - _cache.ts < CACHE_TTL && _cache.fixtures.length) return _cache.fixtures;
+  const live = await fetchOddsAPI();
+  if (live) {
+    _cache.fixtures = live;
+    _cache.ts = Date.now();
+    return _cache.fixtures;
+  }
+  if (useDemo) return demoFixtures();
+  return [];
+}
+
+function findArbitrage(fixtures) {
+  const opps = [];
+  for (const f of fixtures) {
+    const bms = Object.entries(f.bookmakers || {});
+    if (bms.length < 2) continue;
+    const best = { home:0, draw:0, away:0, homeBm:'', drawBm:'', awayBm:'' };
+    for (const [bm, odds] of bms) {
+      if ((odds.home||0) > best.home) { best.home = odds.home; best.homeBm = bm; }
+      if ((odds.draw||0) > best.draw) { best.draw = odds.draw; best.drawBm = bm; }
+      if ((odds.away||0) > best.away) { best.away = odds.away; best.awayBm = bm; }
+    }
+    if (!best.home || !best.draw || !best.away) continue;
+    const margin = 1/best.home + 1/best.draw + 1/best.away;
+    if (margin < 1) {
+      opps.push({
+        match: `${f.home} vs ${f.away}`,
+        league: f.league,
+        profit: +((1 - margin) * 100).toFixed(2),
+        margin: +margin.toFixed(4),
+        legs: [
+          { market:'1', odds:best.home, bm:best.homeBm },
+          { market:'X', odds:best.draw, bm:best.drawBm },
+          { market:'2', odds:best.away, bm:best.awayBm },
+        ],
+      });
+    }
+  }
+  return opps.sort((a,b) => b.profit - a.profit);
+}
 
 /** GET /api/odds-compare/fixtures */
 router.get('/fixtures', async (req, res) => {
+  const useDemo = req.query.demo === 'true';
   try {
-    const fixtures = await getFixtures();
+    const fixtures = await getFixtures(useDemo);
     const league   = req.query.league;
-    const list     = league ? fixtures.filter(f => f.league.toLowerCase().includes(league.toLowerCase())) : fixtures;
+    const list     = league ? fixtures.filter(f => f.league?.toLowerCase().includes(league.toLowerCase())) : fixtures;
     res.json({
-      fixtures:   list,
-      total:      list.length,
-      source:     ODDS_API_KEY ? 'the-odds-api' : 'demo',
-      lastUpdate: _cache.ts,
+      fixtures: list,
+      total:    list.length,
+      source:   ODDS_API_KEY ? 'api' : (useDemo ? 'demo' : 'none'),
+      hint:     !ODDS_API_KEY ? 'Добавьте ODDS_API_KEY в .env для реальных коэффициентов' : null,
     });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** GET /api/odds-compare/arbitrage */
+router.get('/arbitrage', async (req, res) => {
+  const useDemo = req.query.demo === 'true';
+  try {
+    const fixtures = await getFixtures(useDemo);
+    const opps     = findArbitrage(fixtures);
+    res.json({ opportunities: opps, total: opps.length });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
@@ -181,61 +165,79 @@ router.get('/fixtures', async (req, res) => {
 /** GET /api/odds-compare/fixture/:id */
 router.get('/fixture/:id', async (req, res) => {
   try {
-    const fixtures = await getFixtures();
+    const fixtures = await getFixtures(false);
     const f = fixtures.find(x => x.id === req.params.id);
-    if (!f) return res.status(404).json({ error: 'Fixture not found' });
+    if (!f) return res.status(404).json({ error: 'Not found' });
     res.json(f);
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-/** GET /api/odds-compare/arbitrage */
-router.get('/arbitrage', async (req, res) => {
+/** GET /api/odds-compare/movement/:team */
+router.get('/movement/:team', async (req, res) => {
+  const useDemo = req.query.demo === 'true';
+  const teamSearch = req.params.team.toLowerCase();
   try {
-    const fixtures = await getFixtures();
-    const opportunities = fixtures
-      .filter(f => f.arb?.possible)
-      .map(f => ({
-        id:        f.id,
-        league:    f.league,
-        match:     `${f.home} vs ${f.away}`,
-        startTime: f.startTime,
-        profit:    f.arb.profit,
-        legs:      f.arb.legs || [],
-      }));
-    res.json({ opportunities, total: opportunities.length });
+    const fixtures = await getFixtures(useDemo);
+    const f = fixtures.find(x =>
+      x.home?.toLowerCase().includes(teamSearch) ||
+      x.away?.toLowerCase().includes(teamSearch)
+    );
+    if (!f) return res.json({ history: [], bookmakers: {} });
+
+    // Генерируем историю движения на основе текущих коэффициентов
+    const bms  = Object.entries(f.bookmakers || {});
+    const avgH = bms.length ? bms.reduce((s,[,b])=>s+(b.home||0),0)/bms.length : 0;
+    const avgD = bms.length ? bms.reduce((s,[,b])=>s+(b.draw||0),0)/bms.length : 0;
+    const avgA = bms.length ? bms.reduce((s,[,b])=>s+(b.away||0),0)/bms.length : 0;
+    const pts  = 12;
+    const history = Array.from({length:pts},(_,i) => {
+      const pct = i/(pts-1);
+      const noise = () => (Math.random()-0.5)*0.04;
+      return {
+        time: new Date(Date.now() - (pts-1-i)*3600000*2).toISOString(),
+        label: `-${(pts-1-i)*2}h`,
+        home: +(avgH*(1.1 - 0.1*pct) + noise()).toFixed(2),
+        draw: +(avgD*(1.02 - 0.02*pct) + noise()).toFixed(2),
+        away: +(avgA*(0.9 + 0.1*pct) + noise()).toFixed(2),
+      };
+    });
+    res.json({ match: `${f.home} vs ${f.away}`, league: f.league, history, bookmakers: f.bookmakers });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-/** GET /api/odds-compare/movement/:id */
-router.get('/movement/:id', async (req, res) => {
+/** GET /api/odds-compare/history */
+router.get('/history', async (req, res) => {
+  // История коэффициентов — нужна ClickHouse таблица odds_history
+  const ch     = req.app.locals.clickhouse;
+  const search = req.query.search || '';
+  if (!ch) return res.json({ records: [], hint: 'ClickHouse не подключён' });
   try {
-    const fixtures = await getFixtures();
-    const f = fixtures.find(x => x.id === req.params.id);
-    if (!f) return res.status(404).json({ error: 'Fixture not found' });
-
-    // Генерируем демо-историю движения линий (реальная — из Odds API с timestamps)
-    const start     = new Date(f.startTime).getTime();
-    const now       = Date.now();
-    const hoursLeft = (start - now) / 3600000;
-    const points    = [];
-
-    for (let h = Math.min(48, Math.ceil(hoursLeft + 4)); h >= 0; h -= 3) {
-      const drift = (Math.random() - 0.5) * 0.12;
-      points.push({
-        t:    new Date(start - h * 3600000).toISOString(),
-        home: Math.max(1.01, +(f.bestOdds.home + drift).toFixed(2)),
-        draw: Math.max(1.01, +(f.bestOdds.draw - drift * 0.5).toFixed(2)),
-        away: Math.max(1.01, +(f.bestOdds.away - drift).toFixed(2)),
-      });
-    }
-
-    res.json({ fixtureId: f.id, match: `${f.home} vs ${f.away}`, history: points });
+    const whereSearch = search ? `AND (home_team ILIKE '%${search}%' OR away_team ILIKE '%${search}%')` : '';
+    const r = await ch.query({
+      query: `
+        SELECT date, home_team, away_team, market,
+               open_home, close_home, open_draw, close_draw,
+               open_away, close_away,
+               round((close_home - open_home)/open_home*100, 1) AS movement,
+               result
+        FROM betquant.odds_history
+        WHERE 1=1 ${whereSearch}
+        ORDER BY date DESC LIMIT 50
+      `,
+      format: 'JSON',
+    });
+    const d = await r.json();
+    res.json({ records: (d.data||[]).map(row => ({
+      ...row,
+      match: `${row.home_team} vs ${row.away_team}`,
+      movement: `${row.movement > 0 ? '+' : ''}${row.movement}%`,
+    }))});
   } catch(e) {
-    res.status(500).json({ error: e.message });
+    res.json({ records: [], error: e.message });
   }
 });
 

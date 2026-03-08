@@ -1,123 +1,304 @@
-// Charts panel + Stats engine + Value Finder + Walk-Forward + Odds History
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════
+//  BetQuant Pro — Графики и коэффициенты + Статистика + История коэффициентов
+//  ВСЕ данные — из реального API. Демо — только при bq_demo_mode=true.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Общие утилиты ─────────────────────────────────────────────────────────
+function _chartColors() {
+  const dk = document.body.classList.contains('dark-mode');
+  return { tc: dk ? '#8892a4' : '#4a5568', gc: dk ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)' };
+}
+function _baseOpts() {
+  const { tc, gc } = _chartColors();
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: tc, font: { size: 10 } } } },
+    scales: {
+      x: { ticks: { color: tc, font: { size: 9 } }, grid: { color: gc } },
+      y: { ticks: { color: tc, font: { size: 9 } }, grid: { color: gc } },
+    },
+  };
+}
+function _noData(containerId, msg) {
+  const el = document.getElementById(containerId);
+  if (el) el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;color:var(--text3);font-size:12px">${msg}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ODDS CHART — движение коэффициентов
+// ═══════════════════════════════════════════════════════════════════════════
 const oddsChart = {
   charts: {},
-  load() {
-    const team = document.getElementById('chartTeamSearch')?.value || 'Arsenal';
-    document.getElementById('oddsChartTitle').textContent = team + ' — Odds Movement';
-    this.renderMovement(team);
-    this.renderComparison(team);
-    this.renderSharpPublic();
-    this.renderOpenClose();
+
+  async load() {
+    const team = document.getElementById('chartTeamSearch')?.value?.trim() || '';
+    if (!team) {
+      _noData('oddsChartTitle', '');
+      const el = document.getElementById('oddsChartTitle');
+      if (el) el.textContent = 'Введите название команды и нажмите «Загрузить»';
+      return;
+    }
+    const el = document.getElementById('oddsChartTitle');
+    if (el) el.textContent = team + ' — Движение коэффициентов';
+
+    try {
+      const r = await apiCall(`/api/odds-compare/movement/${encodeURIComponent(team)}`);
+      if (r && r.history && r.history.length) {
+        this.renderMovementFromAPI(r);
+        return;
+      }
+    } catch(e) {}
+
+    // Нет данных
+    if (this.charts.movement) { try { this.charts.movement.destroy(); } catch(e){} delete this.charts.movement; }
+    const cvs = document.getElementById('chartOddsMovement');
+    if (cvs && cvs.parentElement) {
+      const existing = cvs.parentElement.querySelector('.no-data-msg');
+      if (existing) existing.remove();
+      const msg = document.createElement('div');
+      msg.className = 'no-data-msg';
+      msg.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;';
+      msg.textContent = '📭 Нет данных. Подключите ODDS_API_KEY или выберите другую команду.';
+      cvs.parentElement.style.position = 'relative';
+      cvs.parentElement.appendChild(msg);
+    }
+
+    // Очистить таблицу букмекеров
+    const ct = document.getElementById('oddsComparisonTable');
+    if (ct) ct.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:12px">Нет данных букмекеров</div>';
   },
-  renderMovement(team) {
-    const n = 20;
-    const labels = Array.from({length:n},(_,i)=>`-${n-i}d`);
-    const homeBase=2.0, drawBase=3.4, awayBase=3.2;
-    const homeData=Array.from({length:n},(_,i)=>homeBase + Math.sin(i/3)*0.3 - i*0.01 + (Math.random()-0.5)*0.15);
-    const drawData=Array.from({length:n},(_,i)=>drawBase + Math.cos(i/4)*0.2 + (Math.random()-0.5)*0.1);
-    const awayData=Array.from({length:n},(_,i)=>awayBase + Math.sin(i/3.5+1)*0.25 + i*0.005 + (Math.random()-0.5)*0.15);
-    const textColor=document.body.classList.contains('dark-mode')?'#8892a4':'#4a5568';
-    const gridColor='rgba(255,255,255,0.05)';
-    if(this.charts.movement) this.charts.movement.destroy();
-    this.charts.movement=new Chart(document.getElementById('chartOddsMovement'),{
-      type:'line',
-      data:{labels,datasets:[
-        {label:'Home',data:homeData,borderColor:'#00d4ff',borderWidth:2,pointRadius:3,tension:0.3},
-        {label:'Draw',data:drawData,borderColor:'#ffd740',borderWidth:2,pointRadius:3,tension:0.3},
-        {label:'Away',data:awayData,borderColor:'#fb923c',borderWidth:2,pointRadius:3,tension:0.3}
+
+  renderMovementFromAPI(r) {
+    if (this.charts.movement) { try { this.charts.movement.destroy(); } catch(e){} }
+    const cvs = document.getElementById('chartOddsMovement');
+    if (!cvs) return;
+    // Убрать заглушку если была
+    cvs.parentElement?.querySelector('.no-data-msg')?.remove();
+
+    const labels = r.history.map(h => h.label || h.time || '');
+    const { tc, gc } = _chartColors();
+    this.charts.movement = new Chart(cvs, {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: '1 (Хозяева)', data: r.history.map(h => h.home), borderColor: '#00d4ff', borderWidth: 2, pointRadius: 3, tension: 0.3 },
+        { label: 'X (Ничья)',   data: r.history.map(h => h.draw), borderColor: '#ffd740', borderWidth: 2, pointRadius: 3, tension: 0.3 },
+        { label: '2 (Гости)',   data: r.history.map(h => h.away), borderColor: '#fb923c', borderWidth: 2, pointRadius: 3, tension: 0.3 },
       ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:textColor,font:{size:10}}}},scales:{x:{ticks:{color:textColor,font:{size:9}},grid:{color:gridColor}},y:{ticks:{color:textColor,font:{size:9}},grid:{color:gridColor}}}}
+      options: { ..._baseOpts() },
     });
-    const books=['Pinnacle','Bet365','Betway','William Hill','Betfair','Unibet','1xBet'];
-    const container=document.getElementById('oddsComparisonTable');
-    container.innerHTML='<table class="data-table"><thead><tr><th>Bookmaker</th><th>Home</th><th>Draw</th><th>Away</th><th>Margin%</th></tr></thead><tbody>'+
-      books.map(b=>{
-        const h=(homeBase+0.1+Math.random()*0.3-0.15).toFixed(2);
-        const d=(drawBase+0.1+Math.random()*0.3-0.15).toFixed(2);
-        const a=(awayData[awayData.length-1]+0.1+Math.random()*0.3-0.15).toFixed(2);
-        const margin=((1/h+1/d+1/a-1)*100).toFixed(1);
-        return `<tr><td>${b}</td><td>${h}</td><td>${d}</td><td>${a}</td><td>${margin}%</td></tr>`;
-      }).join('')+'</tbody></table>';
+
+    // Таблица букмекеров
+    if (r.bookmakers && Object.keys(r.bookmakers).length) {
+      const ct = document.getElementById('oddsComparisonTable');
+      if (ct) {
+        const rows = Object.entries(r.bookmakers).map(([bm, odds]) => {
+          const margin = ((1/odds.home + 1/odds.draw + 1/odds.away - 1) * 100).toFixed(1);
+          return `<tr><td>${bm}</td><td>${odds.home||'—'}</td><td>${odds.draw||'—'}</td><td>${odds.away||'—'}</td><td>${margin}%</td></tr>`;
+        }).join('');
+        ct.innerHTML = `<table class="data-table"><thead><tr><th>Букмекер</th><th>1</th><th>X</th><th>2</th><th>Маржа%</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+    }
   },
-  renderSharpPublic() {
-    const textColor=document.body.classList.contains('dark-mode')?'#8892a4':'#4a5568';
-    const gridColor='rgba(255,255,255,0.05)';
-    const labels=['Home','Draw','Away'];
-    if(this.charts.sharp) this.charts.sharp.destroy();
-    this.charts.sharp=new Chart(document.getElementById('chartSharpPublic'),{
-      type:'bar',
-      data:{labels,datasets:[
-        {label:'Sharp %',data:[62,18,20],backgroundColor:'rgba(0,212,255,0.7)',borderRadius:3},
-        {label:'Public %',data:[38,35,27],backgroundColor:'rgba(192,132,252,0.7)',borderRadius:3}
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:textColor,font:{size:10}}}},scales:{x:{ticks:{color:textColor},grid:{color:gridColor}},y:{ticks:{color:textColor,callback:v=>v+'%'},grid:{color:gridColor},max:100}}}
-    });
-  },
-  renderOpenClose() {
-    const n=15;
-    const textColor=document.body.classList.contains('dark-mode')?'#8892a4':'#4a5568';
-    const gridColor='rgba(255,255,255,0.05)';
-    const open=Array.from({length:n},()=>1.5+Math.random()*2);
-    const close=open.map(v=>v*(0.9+Math.random()*0.2));
-    if(this.charts.openclose) this.charts.openclose.destroy();
-    this.charts.openclose=new Chart(document.getElementById('chartOpenClose'),{
-      type:'scatter',
-      data:{datasets:[{label:'Open vs Close',data:open.map((v,i)=>({x:v,y:close[i]})),backgroundColor:open.map((v,i)=>close[i]<v?'rgba(0,230,118,0.8)':'rgba(255,69,96,0.8)'),pointRadius:5}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:textColor,font:{size:10}}}},scales:{x:{title:{display:true,text:'Opening Odds',color:textColor},ticks:{color:textColor},grid:{color:gridColor}},y:{title:{display:true,text:'Closing Odds',color:textColor},ticks:{color:textColor},grid:{color:gridColor}}}}
-    });
-  }
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATS ENGINE — статистика лиг из ClickHouse
+// ═══════════════════════════════════════════════════════════════════════════
 const statsEngine = {
-  charts:{},
-  load() {
-    this.renderLeagueTable();
-    this.renderGoalsChart();
-    this.renderHomeAwayChart();
-    this.renderXGChart();
+  charts: {},
+
+  async load() {
+    const league = document.getElementById('statsLeague')?.value || '';
+    const season = document.getElementById('statsSeason')?.value || '';
+
+    // Статистика команд
+    try {
+      const r = await apiCall(`/api/stats/teams?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}&limit=20`);
+      if (r && r.teams && r.teams.length) {
+        this.renderLeagueTable(r.teams);
+        this.renderXGChart(r.teams);
+        this.renderHomeAwayChart(r.teams);
+      } else {
+        this._noDataAll();
+      }
+    } catch(e) {
+      this._noDataAll();
+    }
+
+    // Голы по минутам
+    try {
+      const r = await apiCall(`/api/stats/goals-by-minute?league=${encodeURIComponent(league)}`);
+      if (r && r.length) {
+        this.renderGoalsChart(r);
+      }
+    } catch(e) {}
   },
-  renderLeagueTable() {
-    const teams=[{t:'Arsenal',p:30,w:19,d:5,l:6,gf:71,ga:28,gd:43,pts:62,xg:62.4,xga:25.1},{t:'Man City',p:30,w:20,d:4,l:6,gf:68,ga:34,gd:34,pts:64,xg:65.2,xga:27.8},{t:'Liverpool',p:30,w:18,d:6,l:6,gf:69,ga:38,gd:31,pts:60,xg:60.1,xga:31.2},{t:'Chelsea',p:30,w:12,d:9,l:9,gf:52,ga:43,gd:9,pts:45,xg:50.2,xga:42.1},{t:'Spurs',p:30,w:11,d:7,l:12,gf:49,ga:55,gd:-6,pts:40,xg:46.1,xga:51.3}];
-    document.getElementById('statsLeagueTable').innerHTML=makeTable(['t','p','w','d','l','gf','ga','gd','pts','xg','xga'],teams);
+
+  renderLeagueTable(teams) {
+    const el = document.getElementById('statsLeagueTable');
+    if (!el) return;
+    if (!teams.length) { el.innerHTML = '<div style="color:var(--text3);padding:12px;font-size:12px">Нет данных. Загрузите статистику через ETL.</div>'; return; }
+    const headers = ['Команда','М','П','Н','П','ГЗ','ГП','ГР','О','xG','xGA'];
+    const keys    = ['team','matches','wins','draws','losses','goals_for','goals_against','gd','points','xg','xga'];
+    el.innerHTML = makeTable(
+      headers.map((h, i) => ({ label: h, key: keys[i] })),
+      teams
+    );
   },
-  renderGoalsChart() {
-    const textColor=document.body.classList.contains('dark-mode')?'#8892a4':'#4a5568';
-    const gridColor='rgba(255,255,255,0.05)';
-    const labels=['0','1','2','3','4','5','6+'];
-    const data=[8,22,28,21,13,6,2];
-    if(this.charts.goals) this.charts.goals.destroy();
-    this.charts.goals=new Chart(document.getElementById('chartStatsGoals'),{type:'bar',data:{labels,datasets:[{label:'Matches',data,backgroundColor:'rgba(0,212,255,0.7)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:textColor},grid:{color:gridColor}},y:{ticks:{color:textColor},grid:{color:gridColor}}}}});
+
+  renderGoalsChart(data) {
+    if (this.charts.goals) { try { this.charts.goals.destroy(); } catch(e){} }
+    const cvs = document.getElementById('chartStatsGoals');
+    if (!cvs || !data.length) return;
+    const { tc, gc } = _chartColors();
+    this.charts.goals = new Chart(cvs, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.minute + "'"),
+        datasets: [{ label: 'Голы', data: data.map(d => d.goals), backgroundColor: 'rgba(0,212,255,0.6)', borderRadius: 2 }],
+      },
+      options: { ..._baseOpts(), plugins: { legend: { display: false } } },
+    });
   },
-  renderHomeAwayChart() {
-    const textColor=document.body.classList.contains('dark-mode')?'#8892a4':'#4a5568';
-    const gridColor='rgba(255,255,255,0.05)';
-    if(this.charts.homeaway) this.charts.homeaway.destroy();
-    this.charts.homeaway=new Chart(document.getElementById('chartStatsHomeAway'),{type:'doughnut',data:{labels:['Home Win','Draw','Away Win'],datasets:[{data:[46,27,27],backgroundColor:['rgba(0,212,255,0.8)','rgba(255,215,64,0.8)','rgba(251,146,60,0.8)']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:textColor,font:{size:10}}}}}});
+
+  renderHomeAwayChart(teams) {
+    if (this.charts.homeaway) { try { this.charts.homeaway.destroy(); } catch(e){} }
+    const cvs = document.getElementById('chartStatsHomeAway');
+    if (!cvs || !teams.length) return;
+    const homeWins  = teams.reduce((s, t) => s + (+t.home_wins || 0), 0);
+    const draws     = teams.reduce((s, t) => s + (+t.draws || 0), 0);
+    const awayWins  = teams.reduce((s, t) => s + (+t.away_wins || 0), 0);
+    const total = homeWins + draws + awayWins || 1;
+    const { tc } = _chartColors();
+    this.charts.homeaway = new Chart(cvs, {
+      type: 'doughnut',
+      data: {
+        labels: ['Победа хозяев', 'Ничья', 'Победа гостей'],
+        datasets: [{ data: [
+          +(homeWins/total*100).toFixed(1),
+          +(draws/total*100).toFixed(1),
+          +(awayWins/total*100).toFixed(1),
+        ], backgroundColor: ['rgba(0,212,255,0.8)', 'rgba(255,215,64,0.8)', 'rgba(251,146,60,0.8)'] }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: tc, font: { size: 10 } } } } },
+    });
   },
-  renderXGChart() {
-    const textColor=document.body.classList.contains('dark-mode')?'#8892a4':'#4a5568';
-    const gridColor='rgba(255,255,255,0.05)';
-    const teams=['Arsenal','Man City','Liverpool','Chelsea','Spurs'];
-    const xg=[62.4,65.2,60.1,50.2,46.1];
-    const actual=[71,68,69,52,49];
-    if(this.charts.xg) this.charts.xg.destroy();
-    this.charts.xg=new Chart(document.getElementById('chartStatsXG'),{type:'bar',data:{labels:teams,datasets:[{label:'xG',data:xg,backgroundColor:'rgba(0,212,255,0.6)',borderRadius:3},{label:'Actual Goals',data:actual,backgroundColor:'rgba(0,230,118,0.6)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:textColor,font:{size:10}}}},scales:{x:{ticks:{color:textColor},grid:{color:gridColor}},y:{ticks:{color:textColor},grid:{color:gridColor}}}}});
-  }
+
+  renderXGChart(teams) {
+    if (this.charts.xg) { try { this.charts.xg.destroy(); } catch(e){} }
+    const cvs = document.getElementById('chartStatsXG');
+    if (!cvs || !teams.length) return;
+    const top = teams.slice(0, 10);
+    const { tc } = _chartColors();
+    this.charts.xg = new Chart(cvs, {
+      type: 'bar',
+      data: {
+        labels: top.map(t => t.team),
+        datasets: [
+          { label: 'xG', data: top.map(t => +t.xg || 0), backgroundColor: 'rgba(0,212,255,0.6)', borderRadius: 3 },
+          { label: 'Голы забито', data: top.map(t => +t.goals_for || 0), backgroundColor: 'rgba(0,230,118,0.6)', borderRadius: 3 },
+        ],
+      },
+      options: _baseOpts(),
+    });
+  },
+
+  _noDataAll() {
+    const msg = '<div style="color:var(--text3);padding:40px;text-align:center;font-size:12px">📭 Нет данных. Подключите ClickHouse и загрузите статистику через ETL-менеджер.</div>';
+    const ids = ['statsLeagueTable','chartStatsGoals','chartStatsHomeAway','chartStatsXG'];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        // Для canvas — скрыть и показать текст рядом
+        if (el.tagName === 'CANVAS' && el.parentElement) {
+          el.style.display = 'none';
+          if (!el.parentElement.querySelector('.no-data-stats')) {
+            const d = document.createElement('div'); d.className = 'no-data-stats';
+            d.style.cssText = 'color:var(--text3);font-size:11px;padding:8px;text-align:center';
+            d.textContent = 'Нет данных'; el.parentElement.appendChild(d);
+          }
+        } else { el.innerHTML = msg; }
+      }
+    });
+  },
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  ODDS HISTORY — история коэффициентов из API
+// ═══════════════════════════════════════════════════════════════════════════
 const oddsHistory = {
   async load() {
-    const search=document.getElementById('ohSearch')?.value||'';
-    const container=document.getElementById('oddsHistoryTable');
-    const rows=Array.from({length:20},(_,i)=>({
-      date:`2024-03-${(i+1).toString().padStart(2,'0')}`,
-      match:'Arsenal vs '+['Chelsea','City','Liverpool','Spurs','Everton'][i%5],
-      market:['1X2','O/U 2.5','BTTS','AH'][i%4],
-      open_home:(1.5+Math.random()).toFixed(2),close_home:(1.5+Math.random()).toFixed(2),
-      open_draw:(3.0+Math.random()*0.8).toFixed(2),close_draw:(3.0+Math.random()*0.8).toFixed(2),
-      open_away:(2.5+Math.random()*1.5).toFixed(2),close_away:(2.5+Math.random()*1.5).toFixed(2),
-      movement:((Math.random()-0.5)*10).toFixed(1)+'%',result:['H','D','A'][Math.floor(Math.random()*3)]
-    }));
-    container.innerHTML=makeTable(['date','match','market','open_home','close_home','open_draw','close_draw','open_away','close_away','movement','result'],rows);
-  }
+    const search    = document.getElementById('ohSearch')?.value?.trim() || '';
+    const container = document.getElementById('oddsHistoryTable');
+    if (!container) return;
+
+    container.innerHTML = '<div style="color:var(--text3);padding:16px;font-size:12px">⏳ Загрузка...</div>';
+
+    try {
+      const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+      const r  = await apiCall(`/api/odds-compare/history${qs}`);
+      if (r && r.records && r.records.length) {
+        container.innerHTML = makeTable(
+          [
+            { label: 'Дата',           key: 'date' },
+            { label: 'Матч',           key: 'match' },
+            { label: 'Рынок',          key: 'market' },
+            { label: 'Откр. 1',        key: 'open_home' },
+            { label: 'Закр. 1',        key: 'close_home' },
+            { label: 'Откр. X',        key: 'open_draw' },
+            { label: 'Закр. X',        key: 'close_draw' },
+            { label: 'Откр. 2',        key: 'open_away' },
+            { label: 'Закр. 2',        key: 'close_away' },
+            { label: 'Движение',       key: 'movement' },
+            { label: 'Итог',           key: 'result' },
+          ],
+          r.records
+        );
+        return;
+      }
+    } catch(e) {}
+
+    container.innerHTML = `
+      <div style="padding:48px;text-align:center">
+        <div style="font-size:32px;margin-bottom:12px">📭</div>
+        <div style="color:var(--text2);margin-bottom:6px">Нет истории коэффициентов</div>
+        <div style="color:var(--text3);font-size:12px">Подключите <strong>ODDS_API_KEY</strong> в .env для получения данных</div>
+      </div>`;
+  },
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Вспомогательные функции (если не объявлены в app.js)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// makeTable — универсальная таблица. Если в app.js уже есть — эта не будет использована.
+if (typeof makeTable === 'undefined') {
+  window.makeTable = function(columns, rows) {
+    if (!rows || !rows.length) return '<div style="color:var(--text3);padding:12px;font-size:12px">Нет данных</div>';
+    const heads = columns.map(c => `<th>${typeof c === 'string' ? c : c.label}</th>`).join('');
+    const bodyRows = rows.map(row => {
+      const cells = columns.map(c => {
+        const key = typeof c === 'string' ? c : c.key;
+        return `<td>${row[key] ?? '—'}</td>`;
+      }).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    return `<table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+  };
+}
+
+// apiCall — базовый fetch с авторизацией
+if (typeof apiCall === 'undefined') {
+  window.apiCall = async function(url, method = 'GET', body = null) {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('bq_token') || 'demo' },
+      credentials: 'include',
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    if (!r.ok) throw new Error(`${r.status} ${url}`);
+    return r.json();
+  };
+}
