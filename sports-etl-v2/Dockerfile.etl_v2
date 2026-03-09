@@ -1,18 +1,22 @@
 FROM python:3.11-slim
 
+LABEL description="BetQuant ETL v2 — Basketball/Cricket/Rugby/NFL/WaterPolo/Volleyball"
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ curl && rm -rf /var/lib/apt/lists/*
+    curl && rm -rf /var/lib/apt/lists/*
 
-COPY requirements_etl_v2.txt .
+# Копируем requirements из папки sports-etl-v2 (контекст сборки — корень проекта)
+COPY sports-etl-v2/requirements_etl_v2.txt .
 RUN pip install --no-cache-dir -r requirements_etl_v2.txt
 
-COPY . .
+# Копируем всё содержимое sports-etl-v2 в рабочую директорию
+COPY sports-etl-v2/ .
 
 ENV CLICKHOUSE_URL=http://clickhouse:8123
 ENV CLICKHOUSE_DB=betquant
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["python3", "run_etl_v2.py"]
-CMD ["--all", "--seasons", "3"]
+CMD ["--sport", "all", "--seasons", "3"]

@@ -26,8 +26,6 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
-      clickhouse-init:
-        condition: service_completed_successfully
     restart: unless-stopped
     networks: [bq]
 
@@ -52,8 +50,8 @@ services:
     networks: [bq]
 
   # ───────── ClickHouse ─────────
-  # Важно: ClickHouse НЕ выполняет .sql из /docker-entrypoint-initdb.d/ автоматически.
-  # Инициализация схемы делается отдельным сервисом clickhouse-init (см. ниже).
+  # clickhouse/clickhouse-server выполняет *.sql и *.sh из /docker-entrypoint-initdb.d/
+  # автоматически при первом старте (когда том ch-data пустой).
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
     container_name: betquant-ch
@@ -64,6 +62,9 @@ services:
     volumes:
       - ch-data:/var/lib/clickhouse
       - ch-logs:/var/log/clickhouse-server
+      # Схема применяется автоматически при первом старте (когда том пустой)
+      - ./init-scripts/02_init_clickhouse.sql:/docker-entrypoint-initdb.d/02_legacy.sql
+      - ./init-scripts/02_init_clickhouse_extended.sql:/docker-entrypoint-initdb.d/03_extended.sql
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -75,24 +76,6 @@ services:
       timeout: 5s
       retries: 15
     restart: unless-stopped
-    networks: [bq]
-
-  # ───────── ClickHouse Schema Init ─────────
-  # Запускается один раз после того как ClickHouse стал healthy.
-  # Применяет legacy-схему + расширенную схему (football, hockey, tennis, basketball, etc.)
-  # После завершается (exit 0) — это нормально.
-  clickhouse-init:
-    image: clickhouse/clickhouse-client:24.3
-    container_name: betquant-ch-init
-    volumes:
-      - ./init-scripts/02_init_clickhouse.sh:/init.sh
-      - ./init-scripts/02_init_clickhouse.sql:/init_legacy.sql
-      - ./init-scripts/02_init_clickhouse_extended.sql:/init_extended.sql
-    entrypoint: ["sh", "/init.sh"]
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-    restart: "no"
     networks: [bq]
 
   # ───────── ETL v1 — Data Collector (Football, Hockey, Tennis, NBA, MLB) ─────────
@@ -115,14 +98,11 @@ services:
       CH_PASS:     ""
       ETL_SEASONS: "3"
       ETL_LEAGUES: top
-      BETQUANT_HOST:  http://app:3000
     volumes:
       - etl-cache:/opt/etl-cache
     depends_on:
       clickhouse:
         condition: service_healthy
-      clickhouse-init:
-        condition: service_completed_successfully
     restart: "no"
     profiles: ["etl"]
     networks: [bq]
@@ -142,14 +122,11 @@ services:
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DB:  betquant
       PYTHONUNBUFFERED: "1"
-      BETQUANT_HOST:  http://app:3000
     volumes:
       - etl-cache:/app/cache
     depends_on:
       clickhouse:
         condition: service_healthy
-      clickhouse-init:
-        condition: service_completed_successfully
     restart: "no"
     profiles: ["etl-v2"]
     networks: [bq]
@@ -183,12 +160,26 @@ services:
     restart: unless-stopped
     networks: [bq]
 
+  dbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: cloudbeaver
+    depends_on:
+      - greenplum-db
+    networks:
+      - shared-network 
+    ports:
+      - "28978:8978"
+    volumes:
+      - cloudbeaver-data:/opt/cloudbeaver/workspace
+    restart: unless-stopped
+
 volumes:
   pg-data:
   ch-data:
   ch-logs:
   redis-data:
   etl-cache:
+  cloudbeaver-data:
 
 networks:
   bq:
