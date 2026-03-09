@@ -89,6 +89,7 @@ try {
 } catch (e) { console.warn('⚠️  @clickhouse/client issue:', e.message); }
 // ── Neural Networks ────────────────────────────────────────────────────────
 app.locals.clickhouse = clickhouse;
+
 const neuralRoutes = require('./neural');
 app.use('/api/neural', neuralRoutes);
 
@@ -104,13 +105,21 @@ app.use('/api/value', valueRoutes);
 app.use('/api/clv',   clvRoutes);
 
 // ── Stats routes (для "Графики и коэффициенты" + "Статистика") ───────────
-const statsRoutes = (() => {
-  try { return require('./stats_routes'); }
-  catch(e) { console.warn('⚠️  stats_routes missing:', e.message); return null; }
+const _statsRoutes = (() => {
+  try {
+    const r = require('./stats_routes');
+    console.log('[stats] stats_routes loaded OK');
+    return r;
+  } catch(e) {
+    console.warn('⚠️  stats_routes.js not found:', e.message);
+    return null;
+  }
 })();
-if (statsRoutes) {
-  // Прокидываем clickhouse в req.app.locals
-  app.use('/api/stats', requireAuth, statsRoutes);
+
+if (_statsRoutes) {
+  // Убеждаемся что clickhouse доступен в stats_routes через req.app.locals
+  // (строка app.locals.clickhouse = clickhouse должна быть выше по файлу)
+  app.use('/api/stats', requireAuth, _statsRoutes);
 }
 
 
@@ -227,6 +236,7 @@ app.post('/api/db/query', requireAuth, async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+/*
 app.get('/api/stats/summary', requireAuth, async (req, res) => {
   try {
     if (!clickhouse) return res.json({ total: 0, leagues: 0, demo: true });
@@ -238,6 +248,7 @@ app.get('/api/stats/summary', requireAuth, async (req, res) => {
     res.json(d.data?.[0] || { total: 0, leagues: 0 });
   } catch (e) { res.json({ total: 0, leagues: 0, demo: true }); }
 });
+*/
 
 // ETL Status — количество строк в каждой таблице
 app.get('/api/stats/etl-status', requireAuth, async (req, res) => {
@@ -270,6 +281,7 @@ app.get('/api/stats/etl-status', requireAuth, async (req, res) => {
   res.json(result);
 });
 
+/*
 app.get('/api/stats/goals-by-minute', requireAuth, async (req, res) => {
   const { league, season } = req.query;
   try {
@@ -288,6 +300,7 @@ app.get('/api/stats/goals-by-minute', requireAuth, async (req, res) => {
     res.json(d.data || []);
   } catch (e) { res.json([]); }
 });
+*/
 
 // ══════════════════════════════════════════════════════════
 //  BACKTEST

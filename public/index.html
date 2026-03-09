@@ -495,33 +495,36 @@
             </div>
             <div class="panel-header"><h2>📊 Статистика</h2></div>
             <div class="stats-layout">
-                <div class="stats-filters">
-                    <select class="ctrl-select" id="statsLeague" onchange="statsEngine.load()">
-                        <option value="E0">АПЛ</option>
-                        <option value="SP1">Ла Лига</option>
-                        <option value="D1">Бундеслига</option>
-                        <option value="I1">Серия А</option>
-                        <option value="F1">Лига 1</option>
-                        <option value="CL">Лига чемпионов</option>
-                    </select>
-                    <select class="ctrl-select" id="statsSeason" onchange="statsEngine.load()">
-                        <option value="">Все сезоны</option>
-                        <option value="2024-25">2024/25</option>
-                        <option value="2023-24">2023/24</option>
-                        <option value="2022-23">2022/23</option>
-                        <option value="2021-22">2021/22</option>
-                        <option value="2020-21">2020/21</option>
-                    </select>
-                    <select class="ctrl-select" id="statsMetric" onchange="statsEngine.load()">
-                        <option value="goals">Голы</option>
-                        <option value="xg">xG</option>
-                        <option value="shots">Удары</option>
-                        <option value="corners">Угловые</option>
-                        <option value="cards">Карточки</option>
-                    </select>
-                    <button class="ctrl-btn" onclick="statsEngine.load()" title="Обновить">🔄 Обновить</button>
-                    <span id="statsLeagueHint" style="font-size:11px;color:var(--text3);margin-left:4px"></span>
-                </div>
+                
+            <div class="stats-filters" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <!-- Лига: заполняется динамически из /api/stats/leagues при смене спорта -->
+                <select class="ctrl-select" id="statsLeague"
+                        onchange="statsEngine._seasonsCache={};statsEngine.load()"
+                        style="min-width:160px">
+                    <option value="">Загрузка…</option>
+                </select>
+
+                <!-- Сезон: заполняется из /api/stats/seasons -->
+                <select class="ctrl-select" id="statsSeason"
+                        onchange="statsEngine.load()"
+                        style="min-width:120px">
+                    <option value="">Все сезоны</option>
+                </select>
+
+                <!-- Метрика: заполняется из statsEngine._syncFilters -->
+                <select class="ctrl-select" id="statsMetric"
+                        onchange="statsEngine.load()"
+                        style="min-width:110px">
+                    <option value="goals">Голы</option>
+                </select>
+
+                <button class="ctrl-btn" onclick="statsEngine._leaguesCache={};statsEngine._seasonsCache={};statsEngine.load()">
+                    🔄 Обновить
+                </button>
+
+                <span id="statsLeagueHint"
+                    style="font-size:11px;color:var(--text3);margin-left:4px"></span>
+            </div>
                 <div class="stats-grid">
                     <div class="chart-card large"><div class="chart-card-header"><span>Продвинутая статистика лиги</span></div><div id="statsLeagueTable" class="data-table-container"></div></div>
                     <div class="chart-card"><div class="chart-card-header"><span>Распределение голов</span></div><canvas id="chartStatsGoals" height="200"></canvas></div>

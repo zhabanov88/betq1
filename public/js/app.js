@@ -148,18 +148,24 @@ showPanel(name) {
   
   setSport(sport) {
     this.currentSport = sport;
+
+    // 1. Кнопки навигации
     document.querySelectorAll('.sport-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.sport === sport)
     );
 
-    // Обновляем лиги/фильтры в панели Stats под выбранный спорт
-    this._updateStatsFiltersForSport(sport);
+    // 2. Сбрасываем кеши фильтров statsEngine чтобы перегрузить из БД
+    if (typeof statsEngine !== 'undefined') {
+      statsEngine._leaguesCache = {};
+      statsEngine._seasonsCache = {};
+    }
 
-    // Перезагружаем активную панель с новым спортом
+    // 3. Перезагружаем активную панель
     const panel = this.currentPanel;
-    if (panel === 'stats')   statsEngine.load();
-    if (panel === 'value')   valueFinder.init();
-    if (panel === 'live'  && typeof liveMonitor !== 'undefined') liveMonitor.loadMatches();
+    if (panel === 'stats'    && typeof statsEngine   !== 'undefined') statsEngine.load();
+    if (panel === 'value'    && typeof valueFinder   !== 'undefined') valueFinder.init();
+    if (panel === 'elo'      && typeof eloPanel      !== 'undefined') eloPanel.init();
+    if (panel === 'live'     && typeof liveMonitor   !== 'undefined') liveMonitor.loadMatches();
     if (panel === 'charts')  oddsChart.load();
   },
 
