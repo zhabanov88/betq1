@@ -892,6 +892,67 @@ app.get('/api/health', (req, res) => {
 // ══════════════════════════════════════════════════════════
 //  SPA FALLBACK
 // ══════════════════════════════════════════════════════════
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
+});
+
+// ══════════════════════════════════════════════════════════
+//  DATABASE BROWSER — /api/db/table/:name  /api/db/count/:name
+// ══════════════════════════════════════════════════════════
+const DB_TABLES = {
+  // legacy (могут не существовать — вернём пустой результат)
+  matches:      'betquant.matches',
+  odds:         'betquant.odds',
+  team_stats:   'betquant.team_stats',
+  xg_data:      'betquant.xg_data',
+  lineups:      'betquant.lineups',
+  // реальные ETL-таблицы
+  football_matches:    'betquant.football_matches',
+  football_events:     'betquant.football_events',
+  hockey_matches:      'betquant.hockey_matches',
+  hockey_events:       'betquant.hockey_events',
+  tennis_matches:      'betquant.tennis_matches',
+  basketball_matches:  'betquant.basketball_matches',
+  baseball_matches:    'betquant.baseball_matches',
+  etl_log:             'betquant.etl_log',
+};
+
+app.get('/api/db/count/:table', requireAuth, async (req, res) => {
+  const fqn = DB_TABLES[req.params.table];
+  if (!fqn) return res.status(400).json({ error: 'Unknown table', count: 0 });
+  if (!clickhouse) return res.json({ count: 0 });
+  try {
+    const r = await clickhouse.query({ query: `SELECT count() as n FROM ${fqn}`, format: 'JSON' });
+    const d = await r.json();
+    res.json({ count: parseInt(d.data?.[0]?.n || 0) });
+  } catch { res.json({ count: 0 }); }
+});
+
+app.get('/api/db/table/:table', requireAuth, async (req, res) => {
+  const fqn = DB_TABLES[req.params.table];
+  if (!fqn) return res.status(400).json({ error: 'Unknown table', rows: [], total: 0 });
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(200, parseInt(req.query.limit) || 50);
+  const offset = (page - 1) * limit;
+  if (!clickhouse) return res.json({ rows: [], total: 0, columns: [] });
+  try {
+    const [dataR, cntR] = await Promise.all([
+      clickhouse.query({ query: `SELECT * FROM ${fqn} LIMIT ${limit} OFFSET ${offset}`, format: 'JSON' }),
+      clickhouse.query({ query: `SELECT count() as n FROM ${fqn}`, format: 'JSON' }),
+    ]);
+    const data = await dataR.json();
+    const cnt  = await cntR.json();
+    const rows = data.data || [];
+    res.json({
+      rows,
+      total:   parseInt(cnt.data?.[0]?.n || 0),
+      columns: rows.length ? Object.keys(rows[0]) : (data.meta?.map(m => m.name) || []),
+    });
+  } catch (e) {
+    res.json({ rows: [], total: 0, columns: [], error: e.message });
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(PUBLIC, 'index.html'));
 });

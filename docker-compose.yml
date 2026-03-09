@@ -11,6 +11,7 @@ services:
     env_file: .env
     environment:
       - PORT=3000
+      - BDL_API_KEY=83185bbf-4d77-4417-9646-2919c88fa229
       - NODE_ENV=production
       - PG_HOST=postgres
       - PG_PORT=5432
@@ -98,6 +99,7 @@ services:
       CH_PASS:     ""
       ETL_SEASONS: "3"
       ETL_LEAGUES: top
+      BDL_API_KEY: "83185bbf-4d77-4417-9646-2919c88fa229"
     volumes:
       - etl-cache:/opt/etl-cache
     depends_on:

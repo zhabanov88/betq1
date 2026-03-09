@@ -273,8 +273,12 @@ def scrape_tennis(ch, years_back=5):
 BDL_BASE = "https://api.balldontlie.io/v1"
 
 def fetch_bdl(endpoint, params=''):
+    import os
     url = f"{BDL_BASE}/{endpoint}?{params}&per_page=100"
     headers = {'User-Agent': 'BetQuant-ETL/1.0'}
+    key = os.getenv('BDL_API_KEY', '')
+    if key:
+        headers['Authorization'] = key
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode('utf-8'))
