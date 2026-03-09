@@ -21,7 +21,7 @@ const etlManager = {
       const items = [
         { key: 'football_matches',      icon: '⚽', label: 'Футбол' },
         { key: 'hockey_matches',        icon: '🏒', label: 'Хоккей' },
-        { key: 'tennis_extended',       icon: '🎾', label: 'Теннис' },
+        { key: 'tennis_matches',        icon: '🎾', label: 'Теннис' },   // исправлено: было tennis_extended
         { key: 'basketball_matches',    icon: '🏀', label: 'NBA v1' },
         { key: 'baseball_matches',      icon: '⚾', label: 'Бейсбол' },
         { key: 'basketball_matches_v2', icon: '🏀', label: 'NBA v2' },

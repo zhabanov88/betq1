@@ -256,7 +256,7 @@ app.get('/api/stats/etl-status', requireAuth, async (req, res) => {
   const tables = [
     'football_matches', 'football_events', 'football_team_form',
     'hockey_matches', 'hockey_events',
-    'tennis_extended', 'basketball_matches', 'baseball_matches',
+    'tennis_matches', 'basketball_matches', 'baseball_matches',
     // sports-etl-v2 tables
     'basketball_matches_v2', 'cricket_matches', 'rugby_matches',
     'nfl_games', 'waterpolo_matches', 'volleyball_matches',
@@ -780,6 +780,103 @@ h2h.results[], market.implied(odds), market.value(odds,prob), market.kelly(odds,
 // ══════════════════════════════════════════════════════════
 //  HEALTH CHECK
 // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  SCRAPER COLLECT — кнопки "Collect" в панели Сборщик данных
+// ══════════════════════════════════════════════════════════
+const COLLECT_MAP = {
+  'tennis': {
+    script: '../betquant-etl/scrapers/scraper_other_sports.py',
+    args:   ['--years', '5', '--skip-basketball', '--skip-baseball'],
+    label:  'Tennis (Jeff Sackmann)',
+  },
+  'nba': {
+    script: '../betquant-etl/scrapers/scraper_other_sports.py',
+    args:   ['--years', '3', '--skip-tennis', '--skip-baseball'],
+    label:  'NBA (balldontlie.io)',
+  },
+  'nhl': {
+    script: '../betquant-etl/scrapers/scraper_hockey.py',
+    args:   ['--seasons', '3'],
+    label:  'NHL Official API',
+  },
+  'football-data': {
+    script: '../betquant-etl/scrapers/scraper_football.py',
+    args:   ['--seasons', '3', '--skip-understat', '--skip-form'],
+    label:  'Football-Data.co.uk',
+  },
+};
+
+app.post('/api/collect/start', requireAuth, (req, res) => {
+  const { source, league } = req.body;
+  const taskId = 'collect_' + Date.now();
+  tasks.set(taskId, { status: 'running', pct: 0, message: 'Starting...', type: 'info', log: [] });
+  res.json({ taskId, status: 'started' });
+
+  const cfg = COLLECT_MAP[source];
+  if (!cfg) {
+    const t = tasks.get(taskId);
+    t.status = 'done'; t.pct = 100; t.type = 'warn';
+    t.message = `⚠️ Источник "${source}" не поддерживает автозагрузку. Используйте панель ETL ниже.`;
+    return;
+  }
+
+  const { spawn } = require('child_process');
+  const { existsSync } = require('fs');
+  const scriptPath = path.join(__dirname, cfg.script);
+
+  if (!existsSync(scriptPath)) {
+    const t = tasks.get(taskId);
+    t.status = 'done'; t.pct = 100; t.type = 'warn';
+    t.message = `⚠️ Скрипт не найден: ${cfg.script}`;
+    return;
+  }
+
+  const chHost = process.env.CH_HOST || 'http://clickhouse:8123';
+  const chDb   = process.env.CH_DATABASE || process.env.CH_DB || 'betquant';
+  const leagueArgs = (league && source === 'football-data') ? ['--leagues', league] : [];
+
+  const allArgs = [scriptPath,
+    '--ch-host', chHost, '--ch-db', chDb,
+    '--ch-user', process.env.CH_USER || 'default',
+    '--ch-pass', process.env.CH_PASS || '',
+    ...cfg.args, ...leagueArgs
+  ];
+
+  const t = tasks.get(taskId);
+  t.message = `Запускаем ${cfg.label}...`; t.pct = 5;
+
+  const proc = spawn('python3', allArgs, { env: { ...process.env } });
+  proc.stdout.on('data', d => {
+    const line = d.toString().trim(); if (!line) return;
+    t.log = t.log || []; t.log.push(line);
+    if (t.log.length > 200) t.log = t.log.slice(-200);
+    const m = line.match(/(\d+)[\/,](\d+)/);
+    if (m) t.pct = Math.min(95, Math.round(parseInt(m[1]) / parseInt(m[2]) * 90) + 5);
+    t.message = line.slice(0, 150);
+  });
+  proc.stderr.on('data', d => {
+    const l = d.toString().trim();
+    if (l && !l.startsWith('WARNING') && !l.startsWith('[notice]')) {
+      t.log = t.log || []; t.log.push('⚠ ' + l.slice(0, 200));
+    }
+  });
+  proc.on('close', code => {
+    t.status  = code === 0 ? 'done' : 'error';
+    t.pct     = 100;
+    t.type    = code === 0 ? 'success' : 'error';
+    t.message = code === 0 ? `✅ ${cfg.label} — загрузка завершена` : `❌ Ошибка (код ${code})`;
+  });
+  proc.on('error', () => {
+    t.status = 'done'; t.pct = 100; t.type = 'warn';
+    t.message = '⚠️ python3 не найден. Используйте: docker compose --profile etl run --rm etl';
+  });
+});
+
+app.get('/api/collect/progress/:taskId', requireAuth, (req, res) => {
+  const t = tasks.get(req.params.taskId);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json(t);
+});
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
