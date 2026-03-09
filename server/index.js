@@ -108,7 +108,10 @@ const statsRoutes = (() => {
   try { return require('./stats_routes'); }
   catch(e) { console.warn('⚠️  stats_routes missing:', e.message); return null; }
 })();
-if (statsRoutes) app.use('/api/stats', statsRoutes);
+if (statsRoutes) {
+  // Прокидываем clickhouse в req.app.locals
+  app.use('/api/stats', requireAuth, statsRoutes);
+}
 
 
 // ── Priority 2: Telegram, Odds Compare ───────────────────────────────────

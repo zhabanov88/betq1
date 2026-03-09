@@ -496,9 +496,31 @@
             <div class="panel-header"><h2>📊 Статистика</h2></div>
             <div class="stats-layout">
                 <div class="stats-filters">
-                    <select class="ctrl-select" id="statsLeague" onchange="statsEngine.load()"><option value="epl">АПЛ</option><option value="laliga">Ла Лига</option><option value="bundesliga">Бундеслига</option><option value="seriea">Серия А</option></select>
-                    <select class="ctrl-select" id="statsSeason" onchange="statsEngine.load()"><option value="2024">2024/25</option><option value="2023">2023/24</option><option value="2022">2022/23</option></select>
-                    <select class="ctrl-select" id="statsMetric" onchange="statsEngine.load()"><option value="goals">Голы</option><option value="xg">xG</option><option value="shots">Удары</option><option value="corners">Угловые</option></select>
+                    <select class="ctrl-select" id="statsLeague" onchange="statsEngine.load()">
+                        <option value="E0">АПЛ</option>
+                        <option value="SP1">Ла Лига</option>
+                        <option value="D1">Бундеслига</option>
+                        <option value="I1">Серия А</option>
+                        <option value="F1">Лига 1</option>
+                        <option value="CL">Лига чемпионов</option>
+                    </select>
+                    <select class="ctrl-select" id="statsSeason" onchange="statsEngine.load()">
+                        <option value="">Все сезоны</option>
+                        <option value="2024-25">2024/25</option>
+                        <option value="2023-24">2023/24</option>
+                        <option value="2022-23">2022/23</option>
+                        <option value="2021-22">2021/22</option>
+                        <option value="2020-21">2020/21</option>
+                    </select>
+                    <select class="ctrl-select" id="statsMetric" onchange="statsEngine.load()">
+                        <option value="goals">Голы</option>
+                        <option value="xg">xG</option>
+                        <option value="shots">Удары</option>
+                        <option value="corners">Угловые</option>
+                        <option value="cards">Карточки</option>
+                    </select>
+                    <button class="ctrl-btn" onclick="statsEngine.load()" title="Обновить">🔄 Обновить</button>
+                    <span id="statsLeagueHint" style="font-size:11px;color:var(--text3);margin-left:4px"></span>
                 </div>
                 <div class="stats-grid">
                     <div class="chart-card large"><div class="chart-card-header"><span>Продвинутая статистика лиги</span></div><div id="statsLeagueTable" class="data-table-container"></div></div>

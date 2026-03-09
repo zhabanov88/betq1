@@ -148,7 +148,64 @@ showPanel(name) {
   
   setSport(sport) {
     this.currentSport = sport;
-    document.querySelectorAll('.sport-btn').forEach(b => b.classList.toggle('active', b.dataset.sport === sport));
+    document.querySelectorAll('.sport-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.sport === sport)
+    );
+
+    // Обновляем лиги/фильтры в панели Stats под выбранный спорт
+    this._updateStatsFiltersForSport(sport);
+
+    // Перезагружаем активную панель с новым спортом
+    const panel = this.currentPanel;
+    if (panel === 'stats')   statsEngine.load();
+    if (panel === 'value')   valueFinder.init();
+    if (panel === 'live'  && typeof liveMonitor !== 'undefined') liveMonitor.loadMatches();
+    if (panel === 'charts')  oddsChart.load();
+  },
+
+  // Меняет опции селектов лиги и метрики под спорт
+  _updateStatsFiltersForSport(sport) {
+    const leagueSel  = document.getElementById('statsLeague');
+    const metricSel  = document.getElementById('statsMetric');
+    if (!leagueSel || !metricSel) return;
+
+    const leaguesBySport = {
+      football:   [
+        ['E0','АПЛ'],['SP1','Ла Лига'],['D1','Бундеслига'],
+        ['I1','Серия А'],['F1','Лига 1'],['CL','Лига чемпионов'],
+      ],
+      hockey:     [
+        ['NHL','НХЛ'],['KHL','КХЛ'],['SHL','SHL (Швеция)'],
+        ['Liiga','Финляндия'],['DEL','DEL (Германия)'],
+      ],
+      tennis:     [
+        ['ATP','ATP'],['WTA','WTA'],['Grand Slam','Grand Slam'],['Challenger','Challenger'],
+      ],
+      basketball: [
+        ['NBA','НБА'],['Euroleague','Евролига'],['NCAA','NCAA'],
+      ],
+      baseball:   [
+        ['MLB','MLB'],
+      ],
+      esports:    [
+        ['LOL','League of Legends'],['CS2','CS2'],['Dota2','Dota 2'],
+      ],
+    };
+
+    const metricsBySport = {
+      football:   [['goals','Голы'],['xg','xG'],['shots','Удары'],['corners','Угловые'],['cards','Карточки']],
+      hockey:     [['goals','Голы'],['shots','Броски'],['corsi','Corsi %'],['pp_goals','Гол в большинстве'],['saves','Сейвы']],
+      tennis:     [['aces','Эйсы'],['dfs','Двойные ошибки'],['first_in','1-я подача %'],['breaks','Брейки']],
+      basketball: [['pts','Очки'],['reb','Подборы'],['ast','Передачи'],['fg_pct','FG%'],['3p_pct','3P%']],
+      baseball:   [['runs','Раны'],['hits','Хиты'],['era','ERA'],['whip','WHIP']],
+      esports:    [['kills','Убийства'],['rounds','Раунды'],['maps','Карты']],
+    };
+
+    const leagues = leaguesBySport[sport] || leaguesBySport.football;
+    const metrics = metricsBySport[sport] || metricsBySport.football;
+
+    leagueSel.innerHTML = leagues.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+    metricSel.innerHTML = metrics.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
   },
   
   toggleTheme() {
