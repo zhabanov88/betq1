@@ -305,6 +305,13 @@ app.get('/api/stats/goals-by-minute', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════
 //  BACKTEST
 // ══════════════════════════════════════════════════════════
+const BACKTEST_SPORT_CONFIG = {
+  football:   { table: 'betquant.football_matches',       leagueCol: 'league_code', seasonCol: 'season' },
+  hockey:     { table: 'betquant.hockey_matches',          leagueCol: 'league',      seasonCol: 'season' },
+  basketball: { table: 'betquant.basketball_matches_v2',   leagueCol: 'league',      seasonCol: 'season' },
+  tennis:     { table: 'betquant.tennis_matches',          leagueCol: 'tournament',   seasonCol: 'season' },
+  baseball:   { table: 'betquant.baseball_matches',        leagueCol: 'league',       seasonCol: 'season' },
+};
 app.post('/api/backtest', requireAuth, async (req, res) => {
   const { strategyCode, config = {} } = req.body;
   if (!strategyCode) return res.status(400).json({ error: 'No strategy code' });
@@ -317,8 +324,10 @@ app.post('/api/backtest', requireAuth, async (req, res) => {
       if (season)   where += ` AND season = '${season.replace(/'/g,"''")}'`;
       if (dateFrom) where += ` AND date >= '${dateFrom}'`;
       if (dateTo)   where += ` AND date <= '${dateTo}'`;
+
+      const bt_sc = BACKTEST_SPORT_CONFIG[config.sport || 'football'] || BACKTEST_SPORT_CONFIG.football;
       const r = await clickhouse.query({
-        query: `SELECT * FROM betquant.football_matches ${where} ORDER BY date LIMIT 50000`,
+        query: `SELECT * FROM ${bt_sc.table} ${where} ORDER BY date LIMIT 100000`,
         format: 'JSON'
       });
       const d = await r.json();
@@ -337,6 +346,52 @@ app.post('/api/backtest', requireAuth, async (req, res) => {
     const result = runBacktest(strategyCode, matches, config);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/backtest/matches', requireAuth, async (req, res) => {
+  const { sport='football', league='', season='', dateFrom='', dateTo='', limit=100000 } = req.query;
+  const sc = BACKTEST_SPORT_CONFIG[sport] || BACKTEST_SPORT_CONFIG.football;
+  if (!clickhouse) return res.json({ matches: [], total: 0, source: 'no_db' });
+
+  let where = 'WHERE 1=1';
+  if (league)   where += ` AND ${sc.leagueCol} = '${league.replace(/'/g,"''")}'`;
+  if (season)   where += ` AND ${sc.seasonCol} = '${season.replace(/'/g,"''")}'`;
+  if (dateFrom) where += ` AND date >= '${dateFrom}'`;
+  if (dateTo)   where += ` AND date <= '${dateTo}'`;
+
+  try {
+    const countR = await clickhouse.query({
+      query: `SELECT count() as n FROM ${sc.table} ${where}`, format: 'JSON' });
+    const countD = await countR.json();
+    const total = parseInt(countD.data?.[0]?.n || 0);
+
+    const r = await clickhouse.query({
+      query: `SELECT * FROM ${sc.table} ${where} ORDER BY date ASC LIMIT ${Math.min(parseInt(limit), 100000)}`,
+      format: 'JSON' });
+    const d = await r.json();
+    res.json({ matches: d.data || [], total, sport, source: 'clickhouse' });
+  } catch (e) {
+    res.status(500).json({ error: e.message, matches: [], total: 0 });
+  }
+});
+
+app.get('/api/backtest/sports', requireAuth, async (req, res) => {
+  const result = {};
+  for (const [sport, sc] of Object.entries(BACKTEST_SPORT_CONFIG)) {
+    try {
+      if (clickhouse) {
+        const r = await clickhouse.query({
+          query: `SELECT count() as n, min(date) as from_d, max(date) as to_d FROM ${sc.table}`,
+          format: 'JSON' });
+        const d = await r.json();
+        const row = d.data?.[0] || {};
+        result[sport] = { count: parseInt(row.n||0), from: row.from_d, to: row.to_d, hasData: parseInt(row.n||0) > 0 };
+      } else {
+        result[sport] = { count: 0, hasData: false };
+      }
+    } catch { result[sport] = { count: 0, hasData: false }; }
+  }
+  res.json(result);
 });
 
 function generateDemoMatches(config = {}) {
@@ -670,12 +725,30 @@ app.post('/api/ai/strategy', async (req, res) => {
     mistral:         { url: 'https://api.mistral.ai/v1/chat/completions',    format: 'openai',    getKey: () => clientKey || process.env.MISTRAL_API_KEY },
   };
 
+  // Перед формированием SYSTEM промпта:
+let dbContext = '';
+if (clickhouse) {
+  // Получаем реальные лиги и диапазоны дат
+  const sportTable = BACKTEST_SPORT_CONFIG[sport]?.table || 'betquant.football_matches';
+  const leagueCol = BACKTEST_SPORT_CONFIG[sport]?.leagueCol || 'league_code';
+  try {
+    const r = await clickhouse.query({
+      query: `SELECT ${leagueCol} as league, count() as n, min(date) as f, max(date) as t 
+              FROM ${sportTable} GROUP BY ${leagueCol} ORDER BY n DESC LIMIT 15`,
+      format: 'JSON' });
+    const d = await r.json();
+    if (d.data?.length) {
+      dbContext = '\n\nДанные в БД: ' + d.data.map(x => `${x.league}(${x.n} матчей, ${x.f}—${x.t})`).join(', ');
+      dbContext += '\nГенерируй стратегию ТОЛЬКО под реальные лиги/даты из этого списка.';
+    }
+  } catch(e) {}
+}
   const SYSTEM = `You are BetQuant AI — expert sports betting strategy developer.
 Always produce a complete JavaScript evaluate() function inside a \`\`\`javascript block.
 evaluate(match, team, h2h, market) returns { signal:true, market:'home'|'draw'|'away'|'over'|'under'|'btts', stake:1, prob:0.55 } or null.
 match: odds_home/draw/away/over/under/btts, prob_home/draw/away, team_home, team_away, league, date.
 team.form(name,n), team.xG(name,n), team.goalsScored(name,n), team.goalsConceded(name,n).
-h2h.results[], market.implied(odds), market.value(odds,prob), market.kelly(odds,prob).`;
+h2h.results[], market.implied(odds), market.value(odds,prob), market.kelly(odds,prob). ${dbContext}`;
 
   const p = PROVIDERS[provider] || PROVIDERS.openrouter_free;
   const apiKey = p.getKey();

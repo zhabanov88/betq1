@@ -264,31 +264,115 @@ const backtestEngine = {
     this.running = true;
     document.getElementById('btnRunBacktest').style.display = 'none';
     document.getElementById('btnStopBacktest').style.display = '';
-
+  
     const cfg = this.readConfig();
     const enabled = this.activeStrategies.filter(s => s.enabled);
     if (!enabled.length) { alert('Включи хотя бы одну стратегию'); this.stopUI(); return; }
-
+  
     this.showProgress(10, 'Компиляция стратегий...');
     const evalFns = enabled.map(s => ({ ...s, fn: this.compileStrategy(s.code) }));
-
-    this.showProgress(25, 'Генерация матчей...');
-    const matchesBySport = this.generateAllMatches(cfg, enabled);
-
-    this.showProgress(40, 'Прогон бэктеста...');
+  
+    this.showProgress(20, 'Загрузка данных из базы...');
+    let matchesBySport;
+    try {
+      matchesBySport = await this.fetchMatchesFromServer(cfg, enabled);
+    } catch (err) {
+      this.stopUI();
+      this._showDataError(err.message);
+      return;
+    }
+  
+    const totalLoaded = Object.values(matchesBySport).reduce((s, arr) => s + arr.length, 0);
+    if (totalLoaded === 0) {
+      this.stopUI();
+      this._showDataError('Нет данных в базе. Запустите ETL для загрузки исторических матчей.');
+      return;
+    }
+  
+    this.showProgress(40, `Загружено ${totalLoaded} матчей, прогон бэктеста...`);
+  
     const result = this.parlayRules.length
       ? this.runParlayEngine(evalFns, matchesBySport, cfg)
       : this.runSinglesEngine(evalFns, matchesBySport, cfg);
-
+  
     this.showProgress(85, 'Отрисовка графиков...');
     this.displayResults(result, enabled);
     this.renderCharts(result);
-
-    this.showProgress(100, 'Готово ✓');
+  
+    this.showProgress(100, `Готово ✓ (${totalLoaded} матчей из БД)`);
     setTimeout(() => { const w = document.getElementById('btProgressWrap'); if(w) w.style.display='none'; }, 700);
     this.stopUI();
   },
 
+  async fetchMatchesFromServer(cfg, strategies) {
+    const sports = [...new Set(strategies.map(s => s.sport))];
+    const out = {};
+    for (const sport of sports) {
+      this.showProgress(20 + (sports.indexOf(sport) / sports.length) * 15, `Загрузка: ${sport}...`);
+      try {
+        const params = new URLSearchParams({
+          sport,
+          dateFrom: cfg.dateFrom || '2018-01-01',
+          dateTo:   cfg.dateTo   || new Date().toISOString().slice(0, 10),
+          limit:    100000,
+        });
+        if (cfg.league && cfg.league !== 'all') params.set('league', cfg.league);
+        if (cfg.season) params.set('season', cfg.season);
+  
+        const resp = await fetch(`/api/backtest/matches?${params}`);
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: resp.statusText }));
+          throw new Error(`[${sport}] ${err.error || resp.statusText}`);
+        }
+        const data = await resp.json();
+        out[sport] = (data.matches || []).map(m => this._normalizeMatch(m, sport));
+        console.log(`[backtest] ${sport}: ${out[sport].length} матчей из БД`);
+      } catch (e) {
+        console.error(`[backtest] Ошибка ${sport}:`, e.message);
+        out[sport] = [];
+      }
+    }
+    return out;
+  },
+  
+  _normalizeMatch(m, sport) {
+    return {
+      ...m, sport,
+      team_home: m.team_home || m.home_team || m.winner || '',
+      team_away: m.team_away || m.away_team || m.loser  || '',
+      home_goals: parseFloat(m.home_goals ?? m.home_pts ?? m.w_sets ?? 0),
+      away_goals: parseFloat(m.away_goals ?? m.away_pts ?? m.l_sets ?? 0),
+      odds_home:   parseFloat(m.odds_home  || m.b365_home  || m.b365_winner || 0),
+      odds_draw:   parseFloat(m.odds_draw  || m.b365_draw  || 0),
+      odds_away:   parseFloat(m.odds_away  || m.b365_away  || m.b365_loser  || 0),
+      odds_over:   parseFloat(m.odds_over  || m.b365_over  || m.b365_over25 || 0),
+      odds_under:  parseFloat(m.odds_under || m.b365_under || m.b365_under25 || 0),
+      b365_home:   parseFloat(m.b365_home  || m.odds_home  || m.b365_winner || 0),
+      b365_draw:   parseFloat(m.b365_draw  || m.odds_draw  || 0),
+      b365_away:   parseFloat(m.b365_away  || m.odds_away  || m.b365_loser  || 0),
+      b365_over25: parseFloat(m.b365_over25 || m.b365_over || m.odds_over   || 0),
+      b365_under25:parseFloat(m.b365_under25 || m.b365_under || m.odds_under || 0),
+      home_xg: parseFloat(m.home_xg || m.home_xg_for || 0),
+      away_xg: parseFloat(m.away_xg || m.away_xg_for || 0),
+      home_shots: parseFloat(m.home_shots || 0),
+      away_shots: parseFloat(m.away_shots || 0),
+    };
+  },
+  
+  _showDataError(msg) {
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:24px;background:var(--bg2);border:1px solid var(--red,#f44);border-radius:8px;margin:16px';
+    el.innerHTML = `
+      <div style="font-size:16px;color:var(--red,#f44);margin-bottom:8px">❌ Нет данных для бэктеста</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${msg}</div>
+      <div style="font-size:12px;color:var(--text3)">
+        Перейдите в <strong>Сборщик данных → ETL</strong> и загрузите исторические матчи.
+      </div>
+      <button class="ctrl-btn" style="margin-top:12px" onclick="app.showPanel('scraper')">🕷 Перейти к ETL</button>`;
+    const panel = document.getElementById('panel-backtest');
+    if (panel) panel.prepend(el);
+  },
+  
   readConfig() {
     return {
       dateFrom:    document.getElementById('btDateFrom')?.value   || '2020-01-01',
@@ -308,66 +392,6 @@ const backtestEngine = {
       if (!m) return null;
       return new Function('match','team','h2h','market', m[1] + '\nreturn null;');
     } catch(e) { return null; }
-  },
-
-  generateAllMatches(cfg, strategies) {
-    const out = {};
-    for (const sport of [...new Set(strategies.map(s=>s.sport))]) {
-      out[sport] = this.generateMatchData(cfg, sport);
-    }
-    return out;
-  },
-
-  generateMatchData(cfg, sport='football') {
-    const from = new Date(cfg.dateFrom).getTime();
-    const to   = new Date(cfg.dateTo).getTime();
-    const interval = sport === 'tennis' ? 86400000 : 86400000 * 2;
-    const teamMap = {
-      football:   ['Arsenal','Chelsea','Liverpool','Man City','Bayern','Dortmund','PSG','Real Madrid','Barcelona','Juventus','Inter','Napoli','Ajax','Porto','Sevilla','Lyon'],
-      tennis:     ['Djokovic','Alcaraz','Sinner','Medvedev','Zverev','Rublev','Tsitsipas','Rune','Fritz','Hurkacz','Musetti','Shelton'],
-      basketball: ['Lakers','Warriors','Celtics','Heat','Bucks','Nuggets','76ers','Nets','Bulls','Mavericks','Clippers','Suns'],
-      hockey:     ['Capitals','Penguins','Rangers','Bruins','Canadiens','Maple Leafs','Oilers','Flames','Blues','Blackhawks'],
-      baseball:   ['Yankees','Red Sox','Dodgers','Giants','Cubs','Cardinals','Astros','Braves','Mets','Phillies'],
-    };
-    const leagueMap = {
-      football:   ['EPL','La Liga','Bundesliga','Serie A','Ligue 1','Champions League'],
-      tennis:     ['ATP 500','Grand Slam','Masters 1000','ATP 250'],
-      basketball: ['NBA','Euroleague'],
-      hockey:     ['NHL','KHL'],
-      baseball:   ['MLB'],
-    };
-    const teams   = teamMap[sport]   || teamMap.football;
-    const leagues = leagueMap[sport] || ['League'];
-    const matches = [];
-
-    for (let t = from; t < to; t += interval + Math.random() * interval * 0.5) {
-      const hi = Math.floor(Math.random() * teams.length);
-      let ai = Math.floor(Math.random() * teams.length);
-      if (ai === hi) ai = (ai+1) % teams.length;
-
-      const ho = +(1.4 + Math.random()*3).toFixed(2);
-      const do_ = +(2.5 + Math.random()*2).toFixed(2);
-      const ao = +(1.8 + Math.random()*4).toFixed(2);
-      const oo = +(1.55 + Math.random()*0.7).toFixed(2);
-      const r  = Math.random();
-      const result = sport === 'football'
-        ? (r<0.46?'home':r<0.74?'away':'draw')
-        : (r<0.55?'home':'away');
-      const hg = Math.floor(Math.random()*4), ag = Math.floor(Math.random()*4);
-
-      matches.push({
-        date: new Date(t).toISOString().split('T')[0],
-        sport, league: leagues[Math.floor(Math.random()*leagues.length)],
-        team_home: teams[hi], team_away: teams[ai],
-        odds_home: ho, odds_draw: do_, odds_away: ao,
-        odds_over: oo, odds_under: +(oo*0.9).toFixed(2), odds_btts: +(1.65+Math.random()*0.6).toFixed(2),
-        result, home_goals: hg, away_goals: ag,
-        over25: hg+ag > 2, btts: hg>0 && ag>0,
-        rank_home: Math.ceil(Math.random()*100), rank_away: Math.ceil(Math.random()*100),
-        prob_home: +(0.93/ho).toFixed(3), prob_draw: +(0.93/do_).toFixed(3), prob_away: +(0.93/ao).toFixed(3),
-      });
-    }
-    return matches.sort((a,b) => a.date.localeCompare(b.date));
   },
 
   makeTeamAPI(m, all) {

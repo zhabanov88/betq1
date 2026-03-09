@@ -157,7 +157,6 @@ const statsEngine = {
     const leagues = this._leaguesCache[sport];
     const prevLeague = leagueSel.value;
 
-    // Заполняем лиги
     if (leagues.length) {
       leagueSel.innerHTML =
         `<option value="">Все лиги (${leagues.length})</option>` +
@@ -170,12 +169,14 @@ const statsEngine = {
       if (hintEl) hintEl.textContent = 'Нет данных — запустите ETL';
     }
 
-    // Загружаем сезоны под выбранную лигу
-    const league = leagueSel.value;
-    const cacheKey = `${sport}:${league}`;
+    // ── FIX: читаем выбранный сезон ДО перестройки, восстанавливаем ПОСЛЕ ──
+    const savedSeason    = seasonSel?.value || '';
+    const leagueForSeas  = leagueSel.value;          // после обновления лиг
+    const cacheKey       = `${sport}:${leagueForSeas}`;
+
     if (!this._seasonsCache[cacheKey]) {
       try {
-        const d = await apiCall(`/api/stats/seasons?sport=${sport}&league=${encodeURIComponent(league)}`);
+        const d = await apiCall(`/api/stats/seasons?sport=${sport}&league=${encodeURIComponent(leagueForSeas)}`);
         this._seasonsCache[cacheKey] = d.seasons || [];
       } catch(e) {
         this._seasonsCache[cacheKey] = [];
@@ -183,16 +184,29 @@ const statsEngine = {
     }
 
     const seasons = this._seasonsCache[cacheKey];
-    const prevSeason = seasonSel?.value;
     if (seasonSel) {
-      seasonSel.innerHTML =
-        '<option value="">Все сезоны</option>' +
-        seasons.map(s =>
-          `<option value="${s.season || s}" ${(s.season || s) === prevSeason ? 'selected' : ''}>${s.season || s}</option>`
-        ).join('');
+      const newVals      = seasons.map(s => String(s.season || s));
+      const existingVals = Array.from(seasonSel.options).map(o => o.value).filter(Boolean);
+      const needsRebuild = seasonSel.options.length <= 1
+        || newVals.length !== existingVals.length
+        || newVals.some(v => !existingVals.includes(v));
+
+      if (needsRebuild) {
+        seasonSel.innerHTML =
+          '<option value="">Все сезоны</option>' +
+          seasons.map(s => {
+            const val = String(s.season || s);
+            const cnt = s.matches ? ` (${s.matches})` : '';
+            return `<option value="${val}">${val}${cnt}</option>`;
+          }).join('');
+      }
+      // Всегда восстанавливаем сохранённый выбор пользователя
+      if (savedSeason && newVals.includes(savedSeason)) {
+        seasonSel.value = savedSeason;
+      }
     }
 
-    // Метрики по спорту
+    // Метрики по спорту — перестраиваем только при смене спорта
     const metricsBySport = {
       football:   [['goals','Голы'],['xg','xG'],['shots','Удары'],['corners','Угловые'],['cards','Карточки']],
       hockey:     [['goals','Голы'],['shots','Броски'],['corsi','Corsi%'],['pp','Большинство'],['sv','Вратари']],
@@ -202,79 +216,88 @@ const statsEngine = {
       esports:    [['kills','Фраги'],['rounds','Раунды'],['maps','Карты']],
     };
     if (metricSel) {
-      const metrics = metricsBySport[sport] || metricsBySport.football;
+      const metrics    = metricsBySport[sport] || metricsBySport.football;
       const prevMetric = metricSel.value;
-      metricSel.innerHTML = metrics
-        .map(([v, l]) => `<option value="${v}" ${v === prevMetric ? 'selected' : ''}>${l}</option>`)
-        .join('');
+      const curVals    = Array.from(metricSel.options).map(o => o.value);
+      const newVals    = metrics.map(([v]) => v);
+      if (newVals.some(v => !curVals.includes(v)) || curVals.some(v => !newVals.includes(v))) {
+        metricSel.innerHTML = metrics.map(([v, l]) =>
+          `<option value="${v}" ${v === prevMetric ? 'selected' : ''}>${l}</option>`
+        ).join('');
+      }
     }
   },
 
   // ── Таблица команд ───────────────────────────────────────────────────────
-  async _renderTable(sport, league, season, metric) {
-    const el = document.getElementById('statsLeagueTable');
-    if (!el) return;
-    el.innerHTML = this._spinner();
+  async _renderGoals(sport, league, season) {
+    this._destroyChart('goals');
+    const cvs = document.getElementById('chartStatsGoals');
+    if (!cvs) return;
+    const { tc, gc } = this._colors();
 
     try {
-      const p   = new URLSearchParams({ sport, league, season, metric, limit: 30 });
-      const d   = await apiCall(`/api/stats/teams?${p}`);
+      const p   = new URLSearchParams({ sport, league, season });  // sport обязателен
+      const raw = await apiCall(`/api/stats/goals-by-minute?${p}`);
 
-      if (!d?.teams?.length) {
-        el.innerHTML = `
-          <div style="padding:40px;text-align:center">
-            <div style="font-size:32px;margin-bottom:12px">📭</div>
-            <div style="color:var(--text2);font-size:14px;margin-bottom:8px">
-              ${d?.hint || 'Нет данных'}
-            </div>
-            ${d?.availableLeagues?.length ? `
-              <div style="color:var(--text3);font-size:12px">
-                Доступные лиги: <strong>${d.availableLeagues.join(' · ')}</strong>
-              </div>` : ''}
-          </div>`;
-        // Инвалидируем кеш лиг чтобы перезагрузить
-        delete this._leaguesCache[sport];
+      let rows = [];
+      if (Array.isArray(raw)) {
+        rows = raw;
+      } else if (raw?.type === 'summary') {
+        // events таблица пустая — показываем среднее
+        const avg  = raw.data?.[0]?.avg_goals ?? '?';
+        const cnt  = raw.data?.[0]?.matches   ?? '?';
+        const header = cvs.closest?.('.chart-card')?.querySelector?.('.chart-card-header span');
+        if (header) header.textContent = `Среднее ${avg} гол/матч (${cnt} матчей)`;
+        this._emptyChart(cvs, tc, gc, `Среднее: ${avg} гол/матч`, `${cnt} матчей`);
         return;
       }
 
-      const colsBySport = {
-        football:   [['#','#'],['team','Команда'],['matches','М'],['wins','В'],['draws','Н'],['losses','П'],
-                     ['goals_for','Г+'],['goals_against','Г-'],['gd','±'],['points','Очки'],['xg','xG'],['xga','xGA'],['shots','Удары']],
-        hockey:     [['#','#'],['team','Команда'],['matches','И'],['wins','В'],['ot_wins','ВОТ'],['losses','П'],
-                     ['goals_for','Г+'],['goals_against','Г-'],['points','Очки'],['shots_for','Брос.'],['pp_pct','ПП%'],['sv_pct','Сейв%']],
-        basketball: [['#','#'],['team','Команда'],['matches','И'],['wins','В'],['losses','П'],
-                     ['goals_for','Очки'],['goals_against','Пропущ.']],
-        baseball:   [['#','#'],['team','Команда'],['matches','И'],['wins','В'],['losses','П'],
-                     ['goals_for','Раны'],['goals_against','Пропущ.']],
-        tennis:     [['#','#'],['team','Игрок'],['matches','М'],['wins','В'],['losses','П']],
-      };
-      const cols = colsBySport[sport] || colsBySport.football;
-      const medals = ['🥇','🥈','🥉'];
+      if (!rows.length) {
+        this._emptyChart(cvs, tc, gc, 'Распределение голов', 'Нет данных');
+        return;
+      }
 
-      const ths = cols.map(([,l]) => `<th>${l}</th>`).join('');
-      const trs = d.teams.map((row, i) => {
-        const cells = cols.map(([key]) => {
-          if (key === '#')       return `<td style="color:var(--text3)">${medals[i] || (i+1)}</td>`;
-          const v = row[key];
-          if (v === undefined || v === null) return '<td>—</td>';
-          if (key === 'points') return `<td style="font-weight:700;color:var(--accent)">${v}</td>`;
-          if (key === 'gd')     return `<td style="color:${+v>=0?'var(--green)':'var(--red)'}">${+v>0?'+':''}${v}</td>`;
-          if (['xg','xga','shots','pp_pct','sv_pct'].includes(key))
-                                return `<td style="color:var(--text2)">${parseFloat(v).toFixed(2)}</td>`;
-          if (key === 'team')   return `<td style="font-weight:600">${v}</td>`;
-          return `<td>${v}</td>`;
-        }).join('');
-        return `<tr>${cells}</tr>`;
-      }).join('');
+      const isHockey = sport === 'hockey';
+      const labels = rows.map(r => r.label || (isHockey ? `Период ${r.minute}` : `${r.minute}'`));
+      const data   = rows.map(r => +(r.goals || 0));
+      const total  = data.reduce((a, b) => a + b, 0);
+      const cntAll = rows.reduce((a, r) => a + (+(r.events||0) || 0), 0);
 
-      el.innerHTML = `
-        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-align:right">
-          ✅ ClickHouse · ${d.teams.length} команд · ${d.total?.toLocaleString()} матчей · ${league || 'все лиги'} ${season || ''}
-        </div>
-        <table class="data-table"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
-
+      if (this.charts.goals) { try { this.charts.goals.destroy(); } catch(e){} }
+      this.charts.goals = new Chart(cvs, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: isHockey ? 'Голы по периодам' : 'Голов',
+            data,
+            backgroundColor: 'rgba(0,212,255,0.6)',
+            borderColor:     'rgba(0,212,255,0.9)',
+            borderWidth: 1,
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: {
+            legend: { display: false },
+            subtitle: {
+              display: true,
+              text: isHockey
+                ? `${total} голов по периодам`
+                : `Среднее ${(total / Math.max(data.length / 5, 1)).toFixed(2)} гол/матч (${total} голов)`,
+              color: tc,
+              font: { size: 10 },
+            },
+          },
+          scales: {
+            x: { ticks: { color: tc, font: { size: isHockey ? 11 : 9 } }, grid: { color: gc } },
+            y: { ticks: { color: tc }, grid: { color: gc } },
+          },
+        },
+      });
     } catch(e) {
-      el.innerHTML = `<div style="padding:24px;color:var(--red);font-size:12px">⚠️ ${e.message}</div>`;
+      this._emptyChart(cvs, tc, gc, 'Распределение голов', e.message);
     }
   },
 
@@ -352,36 +375,52 @@ const statsEngine = {
     this._destroyChart('homeaway');
     const cvs = document.getElementById('chartStatsHomeAway');
     if (!cvs) return;
-    const { tc } = this._colors();
+    const { tc, gc } = this._colors();
 
     try {
-      const p = new URLSearchParams({ sport, league, season });
+      const p = new URLSearchParams({ sport, league, season });  // sport обязателен
       const d = await apiCall(`/api/stats/home-away?${p}`);
-      const s = d?.stats || {};
+      const s = d?.stats || d || {};
 
-      const hw = +(s.home_wins || 0);
-      const dr = +(s.draws     || 0);
-      const aw = +(s.away_wins || 0);
+      const hw    = parseInt(s.home_wins || 0);
+      const dr    = parseInt(s.draws     || 0);
+      const aw    = parseInt(s.away_wins || 0);
       const total = hw + dr + aw;
 
       if (!total) {
-        this._emptyChart(cvs, tc, null, 'Дом vs Гости', 'Нет данных');
+        this._emptyChart(cvs, tc, gc, 'Хозяева vs Гости', 'Нет данных');
         return;
       }
 
-      const hasDraw = sport === 'football' || sport === 'tennis';
+      // Для хоккея и баскетбола нет ничьих
+      const hasDraw = dr > 0;
       const labels  = hasDraw ? ['Хозяева','Ничья','Гости'] : ['Хозяева','Гости'];
       const values  = hasDraw ? [hw, dr, aw] : [hw, aw];
       const pcts    = values.map(v => +(v / total * 100).toFixed(1));
-      const colors  = ['rgba(0,212,255,0.8)','rgba(255,210,0,0.7)','rgba(255,69,96,0.8)'];
+      const colors  = ['rgba(0,212,255,0.8)', 'rgba(255,210,0,0.7)', 'rgba(255,69,96,0.8)'];
 
+      if (this.charts.homeaway) { try { this.charts.homeaway.destroy(); } catch(e){} }
       this.charts.homeaway = new Chart(cvs, {
         type: 'doughnut',
-        data: { labels, datasets: [{ data: pcts, backgroundColor: colors.slice(0, labels.length), borderWidth: 2, borderColor: 'transparent' }] },
+        data: {
+          labels,
+          datasets: [{
+            data: pcts,
+            backgroundColor: colors.slice(0, labels.length),
+            borderWidth: 2,
+            borderColor: 'transparent',
+          }],
+        },
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
           plugins: {
             legend: { labels: { color: tc, font: { size: 11 } } },
+            subtitle: {
+              display: true,
+              text: `${total} матчей`,
+              color: tc,
+              font: { size: 10 },
+            },
             tooltip: {
               callbacks: {
                 label: ctx => ` ${ctx.label}: ${ctx.raw}% (${values[ctx.dataIndex]} матчей)`,
@@ -391,7 +430,7 @@ const statsEngine = {
         },
       });
     } catch(e) {
-      this._emptyChart(cvs, tc, null, 'Дом vs Гости', e.message);
+      this._emptyChart(cvs, tc, gc, 'Хозяева vs Гости', e.message);
     }
   },
 
