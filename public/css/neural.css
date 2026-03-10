@@ -384,3 +384,199 @@
   width: 100%;
   max-width: 700px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BetQuant Neural Panel v2 — CSS patch
+   Добавить в конец public/css/style.css  (или в <style> перед </head>)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Status grid ─────────────────────────────────────────────────────────── */
+.nn-status-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.nn-status-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 16px; cursor: pointer;
+  transition: border-color .2s, box-shadow .2s;
+}
+.nn-status-card:hover { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent)22; }
+.nn-status-card.trained { border-color: #4ade8033; }
+.nn-status-card.untrained { opacity: .8; }
+
+.nn-sc-icon { font-size: 26px; line-height: 1; }
+.nn-sc-body { flex: 1; min-width: 0; }
+.nn-sc-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.nn-sc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.nn-sc-actions { flex-shrink: 0; }
+
+/* ── Sport tabs ──────────────────────────────────────────────────────────── */
+#nn-sport-tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--border); padding-bottom: 8px;
+}
+.nn-tab {
+  background: none; border: 1px solid var(--border); color: var(--text2);
+  padding: 7px 18px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  transition: all .2s;
+}
+.nn-tab:hover { border-color: var(--accent); color: var(--text1); }
+.nn-tab.nn-tab-active {
+  background: var(--accent); border-color: var(--accent); color: #0f172a; font-weight: 700;
+}
+
+/* ── Weights layout ──────────────────────────────────────────────────────── */
+.nn-weights-header { margin-bottom: 16px; }
+.nn-weights-title { font-size: 15px; font-weight: 700; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.nn-trained-at { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+.nn-weights-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.nn-full-width { grid-column: 1 / -1; }
+
+.nn-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.nn-section-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.nn-section-sub { font-size: 11px; color: var(--text3); margin-bottom: 12px; }
+
+/* ── Feature list ────────────────────────────────────────────────────────── */
+.nn-feature-list { display: flex; flex-direction: column; gap: 5px; }
+
+.nn-feature-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 120px 54px;
+  align-items: center; gap: 6px;
+  font-size: 12px;
+}
+.nn-feature-rank { color: var(--text3); font-size: 11px; text-align: right; }
+.nn-feature-label { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.nn-feat-group-dot {
+  width: 20px; height: 20px; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0;
+}
+.nn-feature-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nn-feature-bar-wrap { background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; }
+.nn-feature-bar { height: 100%; border-radius: 4px; transition: width .4s; }
+.nn-feature-val { color: var(--text3); font-size: 11px; font-family: monospace; text-align: right; }
+
+/* ── Group bars ──────────────────────────────────────────────────────────── */
+.nn-groups { display: flex; flex-direction: column; gap: 7px; }
+.nn-group-item { display: flex; align-items: flex-start; gap: 8px; }
+.nn-group-icon { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+.nn-group-name { font-size: 12px; font-weight: 600; }
+.nn-group-total { font-size: 11px; color: var(--text3); font-family: monospace; }
+.nn-group-bar-wrap { background: var(--bg3); border-radius: 3px; height: 5px; overflow: hidden; margin-top: 2px; }
+.nn-group-bar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+.nn-group-top-feat { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* ── Target cards ────────────────────────────────────────────────────────── */
+.nn-targets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.nn-target-card {
+  background: var(--bg3); border-radius: 10px; padding: 12px 14px;
+  border: 1px solid var(--border);
+}
+.nn-target-label { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.nn-target-features { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.nn-feat-pill {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 4px;
+  padding: 2px 7px; font-size: 11px; color: var(--text2); display: inline-flex; align-items: center; gap: 3px;
+}
+.nn-feat-imp { color: var(--accent); font-size: 10px; }
+.nn-target-explanation { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+/* ── Strategy grid ───────────────────────────────────────────────────────── */
+.nn-strat-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.nn-strat-title { font-size: 15px; font-weight: 700; }
+.nn-strat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.nn-strat-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.nn-strat-card:hover { border-color: var(--accent)88; box-shadow: 0 2px 16px rgba(0,0,0,.3); }
+
+.nn-strat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.nn-strat-name { font-weight: 700; font-size: 14px; }
+.nn-strat-roi { font-weight: 700; font-size: 13px; flex-shrink: 0; }
+
+.nn-strat-insight { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nn-insight-badge {
+  border: 1px solid; border-radius: 5px; padding: 2px 8px;
+  font-size: 11px; font-weight: 600;
+}
+.nn-strat-conf-text { font-size: 11px; }
+
+.nn-strat-features { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.nn-strat-explanation { font-size: 12px; color: var(--text2); line-height: 1.5; flex: 1; }
+
+.nn-conf-wrap { }
+.nn-conf-bar { background: var(--bg3); border-radius: 4px; height: 5px; overflow: hidden; }
+.nn-conf-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+
+.nn-strat-footer { display: flex; gap: 6px; justify-content: flex-end; margin-top: 2px; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.nn-btn {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text1);
+  border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px;
+  font-weight: 600; transition: all .15s; display: inline-flex; align-items: center; gap: 4px;
+}
+.nn-btn:hover { border-color: var(--accent); background: var(--accent)22; }
+.nn-btn:disabled { opacity: .4; cursor: not-allowed; }
+.nn-btn.sm  { padding: 6px 12px; font-size: 12px; }
+.nn-btn.xs  { padding: 4px 10px; font-size: 11px; }
+.nn-btn.primary { background: var(--accent); border-color: var(--accent); color: #0f172a; }
+.nn-btn.primary:hover { opacity: .85; }
+.nn-btn.green { background: #4ade80; border-color: #4ade80; color: #0f172a; }
+.nn-btn.preview { background: var(--bg3); color: var(--text2); }
+
+/* ── Misc ────────────────────────────────────────────────────────────────── */
+.nn-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600;
+}
+.nn-badge.green  { background: #4ade8022; color: #4ade80; border: 1px solid #4ade8033; }
+.nn-badge.blue   { background: #60a5fa22; color: #60a5fa; border: 1px solid #60a5fa33; }
+.nn-badge.grey   { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
+.nn-badge.red    { background: #f8717122; color: #f87171; border: 1px solid #f8717133; }
+
+.nn-empty {
+  text-align: center; padding: 48px 20px; color: var(--text3); font-size: 14px;
+}
+.nn-not-trained {
+  text-align: center; padding: 48px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.nn-not-trained-icon { font-size: 48px; }
+
+.nn-loss-mini { margin-top: 6px; }
+
+@keyframes nn-spin { to { transform: rotate(360deg); } }
+.nn-spin { display: inline-block; animation: nn-spin .8s linear infinite; }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .nn-weights-layout { grid-template-columns: 1fr; }
+  .nn-full-width { grid-column: 1; }
+  .nn-feature-row { grid-template-columns: 18px 1fr 80px 42px; }
+  .nn-strat-grid { grid-template-columns: 1fr; }
+}
