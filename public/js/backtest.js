@@ -333,30 +333,62 @@ const backtestEngine = {
       }
     }
     return out;
-  },
+  }, 
   
   _normalizeMatch(m, sport) {
-    return {
-      ...m, sport,
-      team_home: m.team_home || m.home_team || m.winner || '',
-      team_away: m.team_away || m.away_team || m.loser  || '',
-      home_goals: parseFloat(m.home_goals ?? m.home_pts ?? m.w_sets ?? 0),
-      away_goals: parseFloat(m.away_goals ?? m.away_pts ?? m.l_sets ?? 0),
-      odds_home:   parseFloat(m.odds_home  || m.b365_home  || m.b365_winner || 0),
-      odds_draw:   parseFloat(m.odds_draw  || m.b365_draw  || 0),
-      odds_away:   parseFloat(m.odds_away  || m.b365_away  || m.b365_loser  || 0),
-      odds_over:   parseFloat(m.odds_over  || m.b365_over  || m.b365_over25 || 0),
-      odds_under:  parseFloat(m.odds_under || m.b365_under || m.b365_under25 || 0),
-      b365_home:   parseFloat(m.b365_home  || m.odds_home  || m.b365_winner || 0),
-      b365_draw:   parseFloat(m.b365_draw  || m.odds_draw  || 0),
-      b365_away:   parseFloat(m.b365_away  || m.odds_away  || m.b365_loser  || 0),
-      b365_over25: parseFloat(m.b365_over25 || m.b365_over || m.odds_over   || 0),
-      b365_under25:parseFloat(m.b365_under25 || m.b365_under || m.odds_under || 0),
-      home_xg: parseFloat(m.home_xg || m.home_xg_for || 0),
-      away_xg: parseFloat(m.away_xg || m.away_xg_for || 0),
-      home_shots: parseFloat(m.home_shots || 0),
-      away_shots: parseFloat(m.away_shots || 0),
+    const base = {
+      ...m,
+      sport,
+      // Универсальные алиасы
+      team_home:   m.team_home  || m.home_team  || m.winner || '',
+      team_away:   m.team_away  || m.away_team  || m.loser  || '',
+      home_goals:  parseFloat(m.home_goals  ?? m.home_pts  ?? m.w_sets ?? 0),
+      away_goals:  parseFloat(m.away_goals  ?? m.away_pts  ?? m.l_sets ?? 0),
+      // Коэффициенты — нормализуем все варианты имён
+      odds_home:   parseFloat(m.odds_home   || m.b365_home   || m.b365_winner || m.avg_winner || 0),
+      odds_draw:   parseFloat(m.odds_draw   || m.b365_draw   || 0),
+      odds_away:   parseFloat(m.odds_away   || m.b365_away   || m.b365_loser  || m.avg_loser  || 0),
+      odds_over:   parseFloat(m.odds_over   || m.b365_over   || m.b365_over25 || 0),
+      odds_under:  parseFloat(m.odds_under  || m.b365_under  || m.b365_under25 || 0),
+      b365_home:   parseFloat(m.b365_home   || m.b365_winner || m.avg_winner  || 0),
+      b365_draw:   parseFloat(m.b365_draw   || 0),
+      b365_away:   parseFloat(m.b365_away   || m.b365_loser  || m.avg_loser   || 0),
+      b365_over25: parseFloat(m.b365_over25 || m.b365_over   || m.odds_over   || 0),
+      b365_under25:parseFloat(m.b365_under25 || m.b365_under || m.odds_under  || 0),
+      home_xg:     parseFloat(m.home_xg || m.home_xg_for || 0),
+      away_xg:     parseFloat(m.away_xg || m.away_xg_for || 0),
+      home_shots:  parseFloat(m.home_shots || 0),
+      away_shots:  parseFloat(m.away_shots || 0),
     };
+
+    // ── Теннис: специальная нормализация ──────────────────────────────
+    if (sport === 'tennis') {
+      // result: 'home' означает победа winner (team_home)
+      base.result      = 'home';   // winner всегда побеждает в tennis_matches (это победитель матча)
+      base.winner      = m.winner  || '';
+      base.loser       = m.loser   || '';
+      // rank для стратегий
+      base.rank_home   = parseFloat(m.winner_rank || 0);
+      base.rank_away   = parseFloat(m.loser_rank  || 0);
+      // Odds для тенниса: winner = home, loser = away
+      if (!base.odds_home && m.b365_winner) base.odds_home = parseFloat(m.b365_winner);
+      if (!base.odds_away && m.b365_loser)  base.odds_away = parseFloat(m.b365_loser);
+      if (!base.odds_home && m.avg_winner)  base.odds_home = parseFloat(m.avg_winner);
+      if (!base.odds_away && m.avg_loser)   base.odds_away = parseFloat(m.avg_loser);
+      if (!base.odds_home && m.ps_winner)   base.odds_home = parseFloat(m.ps_winner);
+      if (!base.odds_away && m.ps_loser)    base.odds_away = parseFloat(m.ps_loser);
+      // Служебная статистика для стратегий
+      base.w_aces      = parseInt(m.w_aces  || 0);
+      base.l_aces      = parseInt(m.l_aces  || 0);
+      base.w_df        = parseInt(m.w_df    || 0);
+      base.l_df        = parseInt(m.l_df    || 0);
+      base.surface     = m.surface     || '';
+      base.round       = m.round       || '';
+      base.tournament  = m.tournament  || '';
+      base.sets_played = parseInt(m.sets_played || 0);
+    }
+
+    return base;
   },
   
   _showDataError(msg) {
@@ -372,7 +404,7 @@ const backtestEngine = {
     const panel = document.getElementById('panel-backtest');
     if (panel) panel.prepend(el);
   },
-  
+
   readConfig() {
     return {
       dateFrom:    document.getElementById('btDateFrom')?.value   || '2020-01-01',

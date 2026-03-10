@@ -311,43 +311,73 @@ const BACKTEST_SPORT_CONFIG = {
   football:   { table: 'betquant.football_matches',       leagueCol: 'league_code', seasonCol: 'season' },
   hockey:     { table: 'betquant.hockey_matches',          leagueCol: 'league',      seasonCol: 'season' },
   basketball: { table: 'betquant.basketball_matches_v2',   leagueCol: 'league',      seasonCol: 'season' },
-  tennis:     { table: 'betquant.tennis_matches',          leagueCol: 'tournament',   seasonCol: 'season' },
   baseball:   { table: 'betquant.baseball_matches',        leagueCol: 'league',       seasonCol: 'season' },
+  // ↓↓↓ ИСПРАВЛЕНО: seasonCol убран (нет такой колонки), добавлена dateCol
+  tennis: {
+    table:      'betquant.tennis_matches',
+    leagueCol:  'tour',          // ATP / WTA / Challenger
+    seasonCol:  null,            // ← нет колонки season, фильтр по году через dateFrom/dateTo
+    tournamentCol: 'tournament', // для детального фильтра по турниру
+  },
 };
-app.post('/api/backtest', requireAuth, async (req, res) => {
-  const { strategyCode, config = {} } = req.body;
-  if (!strategyCode) return res.status(400).json({ error: 'No strategy code' });
-  try {
-    let matches = [];
-    if (clickhouse) {
-      const { league = '', season = '', dateFrom = '', dateTo = '' } = config;
-      let where = 'WHERE 1=1';
-      if (league)   where += ` AND league_code = '${league.replace(/'/g,"''")}'`;
-      if (season)   where += ` AND season = '${season.replace(/'/g,"''")}'`;
-      if (dateFrom) where += ` AND date >= '${dateFrom}'`;
-      if (dateTo)   where += ` AND date <= '${dateTo}'`;
+app.get('/api/backtest/matches', requireAuth, async (req, res) => {
+  const { sport='football', league='', season='', dateFrom='', dateTo='', limit=100000 } = req.query;
+  const sc = BACKTEST_SPORT_CONFIG[sport] || BACKTEST_SPORT_CONFIG.football;
+  if (!clickhouse) return res.json({ matches: [], total: 0, source: 'no_db' });
 
-      const bt_sc = BACKTEST_SPORT_CONFIG[config.sport || 'football'] || BACKTEST_SPORT_CONFIG.football;
-      const r = await clickhouse.query({
-        query: `SELECT * FROM ${bt_sc.table} ${where} ORDER BY date LIMIT 100000`,
-        format: 'JSON'
-      });
-      const d = await r.json();
-      matches = d.data || [];
-    }
-    if (!matches.length) {
-      if (config.demoMode === true) {
-        matches = generateDemoMatches(config);
-      } else {
-        return res.status(422).json({
-          error: 'Нет данных для бэктеста. Подключите ClickHouse и загрузите исторические данные, либо включите тестовый режим (кнопка «Тестовые данные» в параметрах бэктеста).',
-          hint: 'enable_demo',
+  const parts = ['1=1'];
+
+  // Фильтр лиги/тура
+  if (league) {
+    parts.push(`${sc.leagueCol} = '${league.replace(/'/g, "''")}'`);
+  }
+
+  // Фильтр сезона — только если у таблицы есть колонка season
+  if (season && sc.seasonCol) {
+    parts.push(`${sc.seasonCol} = '${season.replace(/'/g, "''")}'`);
+  }
+
+  // Фильтр дат
+  if (dateFrom) parts.push(`date >= '${dateFrom}'`);
+  if (dateTo)   parts.push(`date <= '${dateTo}'`);
+
+  const where = 'WHERE ' + parts.join(' AND ');
+
+  try {
+    const countR = await clickhouse.query({
+      query: `SELECT count() as n FROM ${sc.table} ${where}`,
+      format: 'JSON',
+    });
+    const countD = await countR.json();
+    const total  = parseInt(countD.data?.[0]?.n || 0);
+
+    if (total === 0) {
+      // Подсказываем что реально есть в БД
+      let hint = {};
+      try {
+        const infoR = await clickhouse.query({
+          query: `SELECT count() as total, min(date) as from_d, max(date) as to_d FROM ${sc.table}`,
+          format: 'JSON',
         });
-      }
+        const infoD = await infoR.json();
+        hint = infoD.data?.[0] || {};
+      } catch {}
+      return res.json({
+        matches: [], total: 0, sport, source: 'clickhouse',
+        hint: `Нет данных для фильтра. В таблице всего ${hint.total || 0} записей (${hint.from_d || '?'} — ${hint.to_d || '?'})`,
+      });
     }
-    const result = runBacktest(strategyCode, matches, config);
-    res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+
+    const r = await clickhouse.query({
+      query: `SELECT * FROM ${sc.table} ${where} ORDER BY date ASC LIMIT ${Math.min(parseInt(limit), 100000)}`,
+      format: 'JSON',
+    });
+    const d = await r.json();
+    res.json({ matches: d.data || [], total, sport, source: 'clickhouse' });
+  } catch (e) {
+    console.error('[backtest/matches]', sport, e.message);
+    res.status(500).json({ error: e.message, matches: [], total: 0 });
+  }
 });
 
 app.get('/api/backtest/matches', requireAuth, async (req, res) => {
