@@ -90,8 +90,10 @@ try {
 // ── Neural Networks ────────────────────────────────────────────────────────
 app.locals.clickhouse = clickhouse;
 
-const neuralRoutes = require('./neural');
+const { router: neuralRoutes, initNeuralPG } = require('./neural');
 app.use('/api/neural', neuralRoutes);
+if (pgPool) initNeuralPG(pgPool).catch(e => console.warn('[Neural PG]', e.message));
+else setTimeout(() => { if (pgPool) initNeuralPG(pgPool).catch(()=>{}); }, 3000);
 
 // ── Приоритет 1: Live Monitor, Value Finder, CLV ──────────────────────────
 app.locals.pgPool = pgPool;   // если ещё не прописано
@@ -784,6 +786,7 @@ h2h.results[], market.implied(odds), market.value(odds,prob), market.kelly(odds,
 //  SCRAPER COLLECT — кнопки "Collect" в панели Сборщик данных
 // ══════════════════════════════════════════════════════════
 const COLLECT_MAP = {
+  // ── ETL v1 ──────────────────────────────────────────────
   'tennis': {
     script: '../betquant-etl/scrapers/scraper_other_sports.py',
     args:   ['--years', '5', '--skip-basketball', '--skip-baseball'],
@@ -793,6 +796,7 @@ const COLLECT_MAP = {
     script: '../betquant-etl/scrapers/scraper_other_sports.py',
     args:   ['--years', '3', '--skip-tennis', '--skip-baseball'],
     label:  'NBA (balldontlie.io)',
+    timeout: 3600000,  // 1 час — API очень медленный
   },
   'nhl': {
     script: '../betquant-etl/scrapers/scraper_hockey.py',
@@ -804,10 +808,48 @@ const COLLECT_MAP = {
     args:   ['--seasons', '3', '--skip-understat', '--skip-form'],
     label:  'Football-Data.co.uk',
   },
+  // ── ETL v2 ──────────────────────────────────────────────
+  'cricket': {
+    script: '../sports-etl-v2/run_etl_v2.py',
+    args:   ['--sport', 'cricket', '--seasons', '3', '--quick'],
+    label:  'Cricket (Cricsheet)',
+    cwd:    '../sports-etl-v2',
+  },
+  'rugby': {
+    script: '../sports-etl-v2/run_etl_v2.py',
+    args:   ['--sport', 'rugby', '--seasons', '3'],
+    label:  'Rugby Union (ESPN/Scrum)',
+    cwd:    '../sports-etl-v2',
+  },
+  'nfl': {
+    script: '../sports-etl-v2/run_etl_v2.py',
+    args:   ['--sport', 'nfl', '--seasons', '3', '--quick'],
+    label:  'NFL (nflverse)',
+    cwd:    '../sports-etl-v2',
+  },
+  'waterpolo': {
+    script: '../sports-etl-v2/run_etl_v2.py',
+    args:   ['--sport', 'waterpolo', '--seasons', '3'],
+    label:  'Water Polo (FINA/LEN)',
+    cwd:    '../sports-etl-v2',
+  },
+  'volleyball': {
+    script: '../sports-etl-v2/run_etl_v2.py',
+    args:   ['--sport', 'volleyball', '--seasons', '3'],
+    label:  'Volleyball (VNL/CEV)',
+    cwd:    '../sports-etl-v2',
+  },
+  // ── Esports ─────────────────────────────────────────────
+  'esports': {
+    script: '../sports-etl-v2/scrapers/scraper_esports.py',
+    args:   ['http://clickhouse:8123', 'betquant', '2'],
+    label:  'Esports (Dota2 + RL бесплатно, CS2/LoL/Valorant с PandaScore ключом)',
+    envKey: 'PANDASCORE_KEY',   // ключ из поля apiKey в запросе
+  },
 };
 
 app.post('/api/collect/start', requireAuth, (req, res) => {
-  const { source, league } = req.body;
+  const { source, league, apiKey } = req.body;
   const taskId = 'collect_' + Date.now();
   tasks.set(taskId, { status: 'running', pct: 0, message: 'Starting...', type: 'info', log: [] });
   res.json({ taskId, status: 'started' });
@@ -835,17 +877,40 @@ app.post('/api/collect/start', requireAuth, (req, res) => {
   const chDb   = process.env.CH_DATABASE || process.env.CH_DB || 'betquant';
   const leagueArgs = (league && source === 'football-data') ? ['--leagues', league] : [];
 
-  const allArgs = [scriptPath,
-    '--ch-host', chHost, '--ch-db', chDb,
-    '--ch-user', process.env.CH_USER || 'default',
-    '--ch-pass', process.env.CH_PASS || '',
-    ...cfg.args, ...leagueArgs
-  ];
+  // Для esports — передаём аргументы позиционно (скрипт их ожидает как argv)
+  let allArgs;
+  if (source === 'esports') {
+    allArgs = [scriptPath, chHost, chDb, '2'];
+  } else if (cfg.cwd) {
+    // ETL v2 — аргументы + CH параметры
+    allArgs = [scriptPath,
+      '--ch-url', chHost, '--db', chDb,
+      ...cfg.args
+    ];
+  } else {
+    allArgs = [scriptPath,
+      '--ch-host', chHost, '--ch-db', chDb,
+      '--ch-user', process.env.CH_USER || 'default',
+      '--ch-pass', process.env.CH_PASS || '',
+      ...cfg.args, ...leagueArgs
+    ];
+  }
+
+  // Передаём API ключ если нужен
+  const spawnEnv = { ...process.env };
+  if (cfg.envKey && apiKey) {
+    spawnEnv[cfg.envKey] = apiKey;
+  }
 
   const t = tasks.get(taskId);
   t.message = `Запускаем ${cfg.label}...`; t.pct = 5;
 
-  const proc = spawn('python3', allArgs, { env: { ...process.env } });
+  const spawnOpts = { env: spawnEnv };
+  if (cfg.cwd) {
+    spawnOpts.cwd = path.join(__dirname, cfg.cwd);
+  }
+
+  const proc = spawn('python3', allArgs, spawnOpts);
   proc.stdout.on('data', d => {
     const line = d.toString().trim(); if (!line) return;
     t.log = t.log || []; t.log.push(line);

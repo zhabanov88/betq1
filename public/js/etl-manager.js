@@ -30,6 +30,7 @@ const etlManager = {
         { key: 'nfl_games',             icon: '🏈', label: 'NFL' },
         { key: 'waterpolo_matches',     icon: '🤽', label: 'Водное поло' },
         { key: 'volleyball_matches',    icon: '🏐', label: 'Волейбол' },
+        { key: 'esports_matches',       icon: '🎮', label: 'Киберспорт' },
       ];
 
       const fmtN = n => n >= 1000000

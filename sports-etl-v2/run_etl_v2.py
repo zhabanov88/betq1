@@ -12,6 +12,7 @@ BetQuant Sports ETL v2 — Master Orchestrator
   --nfl          American Football (nflverse PbP + player stats)
   --waterpolo    Water Polo (FINA, LEN, Olympic)
   --volleyball   Volleyball (VNL, CEV, SuperLega, PlusLiga)
+  --esports      Esports (CS2, LoL, Dota2, Valorant, RL, CoD — PandaScore + free fallbacks)
   --all          Все виды (по умолчанию)
 
 Примеры:
@@ -199,7 +200,20 @@ def run_volleyball(ch_url, db, seasons, quick):
                 time.time()-t0, 'error', str(e))
         return 0
 
-
+def run_esports(ch_url, db, seasons, quick, api_key=''):
+    log.info("━━━ ESPORTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    t0 = time.time()
+    try:
+        from scrapers.scraper_esports import scrape_esports
+        n = scrape_esports(ch_url, db, seasons_back=seasons, api_key=api_key)
+        log_etl(ch_url, db, 'esports', 'multi', 'esports_matches', n,
+                time.time()-t0, 'ok', f"{n} matches loaded")
+        return n
+    except Exception as e:
+        log.error(f"Esports ETL failed: {e}", exc_info=True)
+        log_etl(ch_url, db, 'esports', 'multi', 'esports_matches', 0,
+                time.time()-t0, 'error', str(e))
+        return 0
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -212,6 +226,8 @@ def main():
     parser.add_argument('--quick',    action='store_true', help='Quick mode (limited data)')
     parser.add_argument('--schema-only', action='store_true')
     parser.add_argument('--skip-schema', action='store_true')
+    parser.add_argument('--pandascore-key', default=os.getenv('PANDASCORE_KEY', ''),
+                        help='PandaScore API key for esports data')
 
     args = parser.parse_args()
 
@@ -262,6 +278,9 @@ def main():
     if run_all or 'volleyball' in sports:
         results['volleyball'] = run_volleyball(ch_url, db, seasons, quick)
 
+    if run_all or 'esports' in sports:
+        results['esports'] = run_esports(ch_url, db, seasons, quick,
+                                          api_key=args.pandascore_key)
     # Summary
     total_time = time.time() - t_total
     log.info("")

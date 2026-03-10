@@ -13,6 +13,12 @@ const scraper = {
     { id:'nba', icon:'🏀', name:'NBA Stats API', desc:'Box scores, play-by-play, advanced stats, shot charts', tags:['Free unofficial','JSON','1946–now'] },
     { id:'nhl', icon:'🏒', name:'NHL Official API', desc:'Play-by-play, Corsi, Fenwick, expected goals, betting lines', tags:['Free API','JSON','1917–now'] },
     { id:'transfermarkt', icon:'💶', name:'Transfermarkt', desc:'Market values, injury history, squad compositions, transfers', tags:['Free scrape','HTML','2000–now'] },
+    { id:'cricket',    icon:'🏏', name:'Cricket (Cricsheet)', desc:'Ball-by-ball data: Test, ODI, T20, IPL, BBL, PSL, CPL — 21,000+ matches', tags:['Open Source','CSV','2000–now'] },
+    { id:'rugby',      icon:'🏉', name:'Rugby Union (ESPN)', desc:'Six Nations, Premiership, URC, Super Rugby, Top14, Champions Cup', tags:['Free scrape','JSON','2018–now'] },
+    { id:'nfl',        icon:'🏈', name:'NFL (nflverse)', desc:'Play-by-play data, 372 fields per play, player stats back to 1999', tags:['Open Source','CSV','1999–now'] },
+    { id:'waterpolo',  icon:'🤽', name:'Water Polo (FINA/LEN)', desc:'FINA World League, LEN Champions League, Olympic tournaments', tags:['Free scrape','JSON','2018–now'] },
+    { id:'volleyball', icon:'🏐', name:'Volleyball (VNL/CEV)', desc:'VNL, CEV Champions League, SuperLega, PlusLiga, FIVB events', tags:['Free scrape','JSON','2018–now'] },
+    { id:'esports',    icon:'🎮', name:'Esports (PandaScore / free)', desc:'CS2, LoL, Dota2, Valorant, Rocket League, CoD, R6, Overwatch, EA FC. Без ключа: Dota2 + Rocket League бесплатно.', tags:['Free/API key','JSON','2013–now'], hasKey:true, keyPlaceholder:'PandaScore API Key (optnl)' },
     { id:'custom', icon:'⚙', name:'Custom Import (CSV/JSON/Excel)', desc:'Import your own data with field mapping wizard', tags:['Any format'] },
   ],
   

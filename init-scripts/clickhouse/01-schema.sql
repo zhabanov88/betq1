@@ -174,6 +174,58 @@ CREATE TABLE IF NOT EXISTS betting.strategy_signals (
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (strategy_id, created_at);
 
+-- ════════════════════════════════════════════════════════════════
+--  BetQuant — Esports Schema
+--  Таблицы: esports_matches, esports_games
+--  Источники: PandaScore, OpenDota, octane.gg
+-- ════════════════════════════════════════════════════════════════
+
+-- Матчи (серии: BO1 / BO3 / BO5)
+CREATE TABLE IF NOT EXISTS betquant.esports_matches (
+    match_id       String,
+    source         LowCardinality(String),   -- pandascore / opendota / octane
+    date           Date,
+    game           LowCardinality(String),   -- CS2, League of Legends, Dota 2, ...
+    game_slug      LowCardinality(String),   -- csgo, lol, dota2, ...
+    league         LowCardinality(String),   -- ESL Pro League, LCK, ...
+    serie          LowCardinality(String),   -- Season 17, Split 1, ...
+    tournament     LowCardinality(String),
+    tier           LowCardinality(String),   -- S / A / B / C / unranked
+    team1          LowCardinality(String),
+    team2          LowCardinality(String),
+    team1_id       String DEFAULT '',
+    team2_id       String DEFAULT '',
+    score1         UInt8 DEFAULT 0,          -- карты/игры выиграно team1
+    score2         UInt8 DEFAULT 0,          -- карты/игры выиграно team2
+    winner         LowCardinality(String),
+    format         UInt8 DEFAULT 1,          -- всего карт в серии (1/3/5)
+    match_type     LowCardinality(String) DEFAULT '',
+    live_url       String DEFAULT '',
+    stream_url     String DEFAULT ''
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(date)
+ORDER BY (game, date, team1, team2)
+SETTINGS index_granularity = 8192;
+
+-- Отдельные карты / игры внутри матча
+CREATE TABLE IF NOT EXISTS betquant.esports_games (
+    match_id       String,
+    game_num       UInt8,
+    date           Date,
+    game           LowCardinality(String),
+    team1          LowCardinality(String),
+    team2          LowCardinality(String),
+    winner         LowCardinality(String),
+    map_name       LowCardinality(String) DEFAULT '',
+    length         UInt16 DEFAULT 0,         -- длительность в секундах
+    status         LowCardinality(String) DEFAULT ''
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(date)
+ORDER BY (game, date, match_id, game_num)
+SETTINGS index_granularity = 8192;
+
 -- =================== MATERIALIZED VIEWS ===================
 
 -- Competition summary stats (pre-aggregated for fast dashboards)
@@ -202,3 +254,5 @@ FROM (
     WHERE status = 'FINISHED'
 )
 GROUP BY competition_id, season;
+
+
