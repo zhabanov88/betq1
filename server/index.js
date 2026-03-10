@@ -308,55 +308,203 @@ app.get('/api/stats/goals-by-minute', requireAuth, async (req, res) => {
 //  BACKTEST
 // ══════════════════════════════════════════════════════════
 const BACKTEST_SPORT_CONFIG = {
-  football:   { table: 'betquant.football_matches',       leagueCol: 'league_code', seasonCol: 'season' },
-  hockey:     { table: 'betquant.hockey_matches',          leagueCol: 'league',      seasonCol: 'season' },
-  basketball: { table: 'betquant.basketball_matches_v2',   leagueCol: 'league',      seasonCol: 'season' },
-  baseball:   { table: 'betquant.baseball_matches',        leagueCol: 'league',       seasonCol: 'season' },
-  // ↓↓↓ ИСПРАВЛЕНО: seasonCol убран (нет такой колонки), добавлена dateCol
-  tennis: {
-    table:      'betquant.tennis_matches',
-    leagueCol:  'tour',          // ATP / WTA / Challenger
-    seasonCol:  null,            // ← нет колонки season, фильтр по году через dateFrom/dateTo
-    tournamentCol: 'tournament', // для детального фильтра по турниру
+  // ── ETL v1 (основные) ─────────────────────────────────────────────────────
+  football: {
+    table:      'betquant.football_matches',
+    leagueCol:  'league_code',
+    leagueLabel:'league_name',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_goals',
+    awayScore:  'away_goals',
+    label:      '⚽ Футбол',
   },
-};
+  hockey: {
+    table:      'betquant.hockey_matches',
+    leagueCol:  'league',
+    leagueLabel:'league',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_goals',
+    awayScore:  'away_goals',
+    label:      '🏒 Хоккей',
+  },
+  basketball: {
+    // Предпочитаем v2, fallback на v1
+    table:      'betquant.basketball_matches_v2',
+    fallback:   'betquant.basketball_matches',
+    leagueCol:  'league',
+    leagueLabel:'league',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_pts',
+    awayScore:  'away_pts',
+    label:      '🏀 Баскетбол',
+  },
+  baseball: {
+    table:      'betquant.baseball_matches',
+    leagueCol:  'league',
+    leagueLabel:'league',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_runs',
+    awayScore:  'away_runs',
+    label:      '⚾ Бейсбол',
+  },
+  tennis: {
+    table:      'betquant.tennis_extended',
+    leagueCol:  'tour',
+    leagueLabel:'tour',
+    seasonCol:  null,          // нет колонки season — фильтр по дате
+    homeTeam:   'winner',
+    awayTeam:   'loser',
+    homeScore:  'w_sets',
+    awayScore:  'l_sets',
+    label:      '🎾 Теннис',
+  },
+
+  // ── ETL v2 (расширенные) ──────────────────────────────────────────────────
+  volleyball: {
+    table:      'betquant.volleyball_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_sets',
+    awayScore:  'away_sets',
+    label:      '🏐 Волейбол',
+  },
+  nfl: {
+    table:      'betquant.nfl_games',
+    leagueCol:  'season_type',
+    leagueLabel:'season_type',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_score',
+    awayScore:  'away_score',
+    label:      '🏈 NFL (Американский футбол)',
+    // Конвертируем season в число
+    seasonCast: 'toUInt16',
+  },
+  rugby: {
+    table:      'betquant.rugby_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_score',
+    awayScore:  'away_score',
+    label:      '🏉 Регби',
+  },
+  cricket: {
+    table:      'betquant.cricket_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  null,
+    homeTeam:   'team1',
+    awayTeam:   'team2',
+    homeScore:  'team1_runs',
+    awayScore:  'team2_runs',
+    label:      '🏏 Крикет',
+  },
+  waterpolo: {
+    table:      'betquant.waterpolo_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_score',
+    awayScore:  'away_score',
+    label:      '🤽 Водное поло',
+  },
+  esports: {
+    table:      'betquant.esports_matches',
+    leagueCol:  'game',        // CS2, Dota 2, LoL и т.д.
+    leagueLabel:'game',
+    seasonCol:  null,
+    homeTeam:   'team1',
+    awayTeam:   'team2',
+    homeScore:  'score1',
+    awayScore:  'score2',
+    label:      '🎮 Киберспорт',
+  },
+};;
 app.get('/api/backtest/matches', requireAuth, async (req, res) => {
-  const { sport='football', league='', season='', dateFrom='', dateTo='', limit=100000 } = req.query;
-  const sc = BACKTEST_SPORT_CONFIG[sport] || BACKTEST_SPORT_CONFIG.football;
+  const {
+    sport    = 'football',
+    league   = '',
+    season   = '',
+    dateFrom = '',
+    dateTo   = '',
+    limit    = 100000,
+  } = req.query;
+
   if (!clickhouse) return res.json({ matches: [], total: 0, source: 'no_db' });
 
-  const parts = ['1=1'];
+  // Ищем конфиг — с fallback на football
+  let sc = BACKTEST_SPORT_CONFIG[sport];
+  if (!sc) {
+    return res.status(400).json({ error: `Неизвестный вид спорта: ${sport}`, matches: [], total: 0 });
+  }
 
-  // Фильтр лиги/тура
-  if (league) {
+  // Определяем рабочую таблицу (с автоматическим fallback)
+  let table = sc.table;
+  if (sc.fallback) {
+    try {
+      const probe = await clickhouse.query({
+        query: `SELECT count() as n FROM ${table}`, format: 'JSON',
+      });
+      const pd = await probe.json();
+      if (parseInt(pd.data?.[0]?.n || 0) === 0 && sc.fallback) {
+        table = sc.fallback;
+      }
+    } catch {
+      table = sc.fallback || sc.table;
+    }
+  }
+
+  // Строим WHERE
+  const parts = ['1=1'];
+  if (league && sc.leagueCol) {
     parts.push(`${sc.leagueCol} = '${league.replace(/'/g, "''")}'`);
   }
-
-  // Фильтр сезона — только если у таблицы есть колонка season
   if (season && sc.seasonCol) {
-    parts.push(`${sc.seasonCol} = '${season.replace(/'/g, "''")}'`);
+    // NFL: season — числовое поле
+    if (sc.seasonCast) {
+      parts.push(`${sc.seasonCol} = ${parseInt(season) || 0}`);
+    } else {
+      parts.push(`${sc.seasonCol} = '${season.replace(/'/g, "''")}'`);
+    }
   }
-
-  // Фильтр дат
   if (dateFrom) parts.push(`date >= '${dateFrom}'`);
   if (dateTo)   parts.push(`date <= '${dateTo}'`);
 
   const where = 'WHERE ' + parts.join(' AND ');
+  const safeLimit = Math.min(parseInt(limit) || 100000, 200000);
 
   try {
+    // Count
     const countR = await clickhouse.query({
-      query: `SELECT count() as n FROM ${sc.table} ${where}`,
+      query:  `SELECT count() as n FROM ${table} ${where}`,
       format: 'JSON',
     });
     const countD = await countR.json();
     const total  = parseInt(countD.data?.[0]?.n || 0);
 
     if (total === 0) {
-      // Подсказываем что реально есть в БД
+      // Показываем сколько данных ВСЕГО в этой таблице (помогает диагностике)
       let hint = {};
       try {
         const infoR = await clickhouse.query({
-          query: `SELECT count() as total, min(date) as from_d, max(date) as to_d FROM ${sc.table}`,
+          query:  `SELECT count() as total, min(date) as from_d, max(date) as to_d FROM ${table}`,
           format: 'JSON',
         });
         const infoD = await infoR.json();
@@ -364,18 +512,22 @@ app.get('/api/backtest/matches', requireAuth, async (req, res) => {
       } catch {}
       return res.json({
         matches: [], total: 0, sport, source: 'clickhouse',
-        hint: `Нет данных для фильтра. В таблице всего ${hint.total || 0} записей (${hint.from_d || '?'} — ${hint.to_d || '?'})`,
+        hint: hint.total
+          ? `Данных по фильтру нет. В таблице всего ${hint.total} записей (${hint.from_d} — ${hint.to_d})`
+          : `Таблица ${table} пуста — запустите ETL`,
       });
     }
 
+    // Fetch
     const r = await clickhouse.query({
-      query: `SELECT * FROM ${sc.table} ${where} ORDER BY date ASC LIMIT ${Math.min(parseInt(limit), 100000)}`,
+      query:  `SELECT * FROM ${table} ${where} ORDER BY date ASC LIMIT ${safeLimit}`,
       format: 'JSON',
     });
     const d = await r.json();
-    res.json({ matches: d.data || [], total, sport, source: 'clickhouse' });
+    res.json({ matches: d.data || [], total, sport, source: 'clickhouse', table });
+
   } catch (e) {
-    console.error('[backtest/matches]', sport, e.message);
+    console.error('[backtest/matches]', sport, table, e.message);
     res.status(500).json({ error: e.message, matches: [], total: 0 });
   }
 });
@@ -407,24 +559,54 @@ app.get('/api/backtest/matches', requireAuth, async (req, res) => {
   }
 });
 
+
+
 app.get('/api/backtest/sports', requireAuth, async (req, res) => {
   const result = {};
   for (const [sport, sc] of Object.entries(BACKTEST_SPORT_CONFIG)) {
     try {
-      if (clickhouse) {
+      if (!clickhouse) { result[sport] = { count: 0, hasData: false, label: sc.label }; continue; }
+
+      // Пробуем основную таблицу, при ошибке — fallback
+      let table = sc.table;
+      let row;
+      try {
         const r = await clickhouse.query({
-          query: `SELECT count() as n, min(date) as from_d, max(date) as to_d FROM ${sc.table}`,
-          format: 'JSON' });
+          query: `SELECT count() as n, min(date) as from_d, max(date) as to_d FROM ${table}`,
+          format: 'JSON',
+        });
         const d = await r.json();
-        const row = d.data?.[0] || {};
-        result[sport] = { count: parseInt(row.n||0), from: row.from_d, to: row.to_d, hasData: parseInt(row.n||0) > 0 };
-      } else {
-        result[sport] = { count: 0, hasData: false };
+        row = d.data?.[0] || {};
+      } catch {
+        if (sc.fallback) {
+          table = sc.fallback;
+          const r2 = await clickhouse.query({
+            query: `SELECT count() as n, min(date) as from_d, max(date) as to_d FROM ${table}`,
+            format: 'JSON',
+          });
+          const d2 = await r2.json();
+          row = d2.data?.[0] || {};
+        } else {
+          row = {};
+        }
       }
-    } catch { result[sport] = { count: 0, hasData: false }; }
+
+      const count = parseInt(row.n || 0);
+      result[sport] = {
+        count,
+        from:    row.from_d || null,
+        to:      row.to_d   || null,
+        hasData: count > 0,
+        label:   sc.label,
+        table,
+      };
+    } catch {
+      result[sport] = { count: 0, hasData: false, label: sc.label };
+    }
   }
   res.json(result);
 });
+
 
 function generateDemoMatches(config = {}) {
   const leagues = ['АПЛ', 'Бундеслига', 'Ла Лига', 'Серия А', 'Лига 1'];
@@ -501,7 +683,136 @@ function runBacktest(code, matches, config = {}) {
     if (b.bank > peak) peak = b.bank;
     const dd = (peak - b.bank) / peak;
     if (dd > maxDD) maxDD = dd;
-  }
+  }const BACKTEST_SPORT_CONFIG = {
+  // ── ETL v1 (основные) ─────────────────────────────────────────────────────
+  football: {
+    table:      'betquant.football_matches',
+    leagueCol:  'league_code',
+    leagueLabel:'league_name',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_goals',
+    awayScore:  'away_goals',
+    label:      '⚽ Футбол',
+  },
+  hockey: {
+    table:      'betquant.hockey_matches',
+    leagueCol:  'league',
+    leagueLabel:'league',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_goals',
+    awayScore:  'away_goals',
+    label:      '🏒 Хоккей',
+  },
+  basketball: {
+    // Предпочитаем v2, fallback на v1
+    table:      'betquant.basketball_matches_v2',
+    fallback:   'betquant.basketball_matches',
+    leagueCol:  'league',
+    leagueLabel:'league',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_pts',
+    awayScore:  'away_pts',
+    label:      '🏀 Баскетбол',
+  },
+  baseball: {
+    table:      'betquant.baseball_matches',
+    leagueCol:  'league',
+    leagueLabel:'league',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_runs',
+    awayScore:  'away_runs',
+    label:      '⚾ Бейсбол',
+  },
+  tennis: {
+    table:      'betquant.tennis_extended',
+    leagueCol:  'tour',
+    leagueLabel:'tour',
+    seasonCol:  null,          // нет колонки season — фильтр по дате
+    homeTeam:   'winner',
+    awayTeam:   'loser',
+    homeScore:  'w_sets',
+    awayScore:  'l_sets',
+    label:      '🎾 Теннис',
+  },
+
+  // ── ETL v2 (расширенные) ──────────────────────────────────────────────────
+  volleyball: {
+    table:      'betquant.volleyball_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_sets',
+    awayScore:  'away_sets',
+    label:      '🏐 Волейбол',
+  },
+  nfl: {
+    table:      'betquant.nfl_games',
+    leagueCol:  'season_type',
+    leagueLabel:'season_type',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_score',
+    awayScore:  'away_score',
+    label:      '🏈 NFL (Американский футбол)',
+    // Конвертируем season в число
+    seasonCast: 'toUInt16',
+  },
+  rugby: {
+    table:      'betquant.rugby_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_score',
+    awayScore:  'away_score',
+    label:      '🏉 Регби',
+  },
+  cricket: {
+    table:      'betquant.cricket_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  null,
+    homeTeam:   'team1',
+    awayTeam:   'team2',
+    homeScore:  'team1_runs',
+    awayScore:  'team2_runs',
+    label:      '🏏 Крикет',
+  },
+  waterpolo: {
+    table:      'betquant.waterpolo_matches',
+    leagueCol:  'competition',
+    leagueLabel:'competition',
+    seasonCol:  'season',
+    homeTeam:   'home_team',
+    awayTeam:   'away_team',
+    homeScore:  'home_score',
+    awayScore:  'away_score',
+    label:      '🤽 Водное поло',
+  },
+  esports: {
+    table:      'betquant.esports_matches',
+    leagueCol:  'game',        // CS2, Dota 2, LoL и т.д.
+    leagueLabel:'game',
+    seasonCol:  null,
+    homeTeam:   'team1',
+    awayTeam:   'team2',
+    homeScore:  'score1',
+    awayScore:  'score2',
+    label:      '🎮 Киберспорт',
+  },
+};
   return {
     bets: bets.slice(-500),
     stats: {

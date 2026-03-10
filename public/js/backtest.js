@@ -5,6 +5,20 @@
 //  • Экспрессы: перекрещивание сигналов из разных стратегий/спортов
 //  • Per-strategy breakdown в таблице ставок
 // ═══════════════════════════════════════════════════════════════════════════
+const SPORT_OPTIONS = [
+  { value: 'football',   label: '⚽ Футбол' },
+  { value: 'hockey',     label: '🏒 Хоккей' },
+  { value: 'basketball', label: '🏀 Баскетбол' },
+  { value: 'baseball',   label: '⚾ Бейсбол' },
+  { value: 'tennis',     label: '🎾 Теннис' },
+  { value: 'volleyball', label: '🏐 Волейбол' },
+  { value: 'nfl',        label: '🏈 NFL' },
+  { value: 'rugby',      label: '🏉 Регби' },
+  { value: 'cricket',    label: '🏏 Крикет' },
+  { value: 'waterpolo',  label: '🤽 Водное поло' },
+  { value: 'esports',    label: '🎮 Киберспорт' },
+];
+
 const backtestEngine = {
   charts:  {},
   running: false,
@@ -85,6 +99,118 @@ const backtestEngine = {
   return null;
 }`,
     },
+    volleyball_home: {
+      name: 'VB Home Win',
+      sport: 'volleyball',
+      code: `function evaluate(match, team, h2h, market) {
+  const form = team.form(match.team_home, 5);
+  const wins = form.filter(r => r === 'W').length;
+  const prob = 0.5 + wins * 0.04;
+  if (prob > 0.58 && match.odds_home >= 1.3 && match.odds_home <= 2.5)
+    return { signal: true, market: 'home', prob, stake: market.kelly(match.odds_home, prob) * 0.5 };
+  return null;
+}`,
+    },
+    volleyball_over_sets: {
+      name: 'VB Over 3.5 Sets',
+      sport: 'volleyball',
+      code: `function evaluate(match, team, h2h, market) {
+  const h2hAvg = h2h.results.length > 0
+    ? h2h.results.reduce((s, r) => s + (r.total_sets || 3), 0) / h2h.results.length
+    : 3;
+  const prob = h2hAvg > 3.5 ? 0.55 : 0.40;
+  if (prob > 0.52 && match.ou_sets_line > 0)
+    return { signal: true, market: 'over', prob, stake: market.kelly(match.ou_sets_line || 1.9, prob) * 0.4 };
+  return null;
+}`,
+    },
+    nfl_home: {
+      name: 'NFL Home Advantage',
+      sport: 'nfl',
+      code: `function evaluate(match, team, h2h, market) {
+  const form = team.form(match.team_home, 4);
+  const wins = form.filter(r => r === 'W').length;
+  const prob = 0.54 + wins * 0.04;
+  if (prob > 0.60 && match.odds_home >= 1.3 && match.odds_home <= 2.2)
+    return { signal: true, market: 'home', prob, stake: market.kelly(match.odds_home, prob) * 0.4 };
+  return null;
+}`,
+    },
+    nfl_over: {
+      name: 'NFL High Scoring Over',
+      sport: 'nfl',
+      code: `function evaluate(match, team, h2h, market) {
+  const hAvg = team.avgGoals(match.team_home, 5);
+  const aAvg = team.avgGoals(match.team_away, 5);
+  const prob = Math.min(0.75, (hAvg + aAvg) / 55);
+  if (prob > 0.55 && match.total_line > 0 && match.odds_over >= 1.7)
+    return { signal: true, market: 'over', prob, stake: market.kelly(match.odds_over, prob) * 0.4 };
+  return null;
+}`,
+    },
+    rugby_home: {
+      name: 'Rugby Home Win',
+      sport: 'rugby',
+      code: `function evaluate(match, team, h2h, market) {
+  const form = team.form(match.team_home, 5);
+  const wins = form.filter(r => r === 'W').length;
+  const prob = 0.52 + wins * 0.05;
+  if (prob > 0.60 && match.odds_home >= 1.3 && match.odds_home <= 2.0)
+    return { signal: true, market: 'home', prob, stake: market.kelly(match.odds_home, prob) * 0.45 };
+  return null;
+}`,
+    },
+    cricket_home: {
+      name: 'Cricket Home Win',
+      sport: 'cricket',
+      code: `function evaluate(match, team, h2h, market) {
+  const form = team.form(match.team_home, 5);
+  const wins = form.filter(r => r === 'W').length;
+  const prob = 0.48 + wins * 0.05;
+  if (prob > 0.55 && match.odds_home >= 1.5 && match.odds_home <= 3.0)
+    return { signal: true, market: 'home', prob, stake: market.kelly(match.odds_home, prob) * 0.4 };
+  return null;
+}`,
+    },
+    waterpolo_home: {
+      name: 'Water Polo Home Win',
+      sport: 'waterpolo',
+      code: `function evaluate(match, team, h2h, market) {
+  const form = team.form(match.team_home, 5);
+  const wins = form.filter(r => r === 'W').length;
+  const prob = 0.52 + wins * 0.04;
+  if (prob > 0.58 && match.odds_home >= 1.3 && match.odds_home <= 2.5)
+    return { signal: true, market: 'home', prob, stake: market.kelly(match.odds_home, prob) * 0.45 };
+  return null;
+}`,
+    },
+    esports_favorite: {
+      name: 'Esports Favorite Win',
+      sport: 'esports',
+      code: `function evaluate(match, team, h2h, market) {
+  const form = team.form(match.team_home, 5);
+  const wins = form.filter(r => r === 'W').length;
+  const prob = 0.5 + wins * 0.06;
+  if (prob > 0.62 && match.odds_home >= 1.2 && match.odds_home <= 1.9)
+    return { signal: true, market: 'home', prob, stake: market.kelly(match.odds_home, prob) * 0.4 };
+  return null;
+}`,
+    },
+    esports_over_maps: {
+      name: 'Esports Over 2.5 Maps (BO5)',
+      sport: 'esports',
+      code: `function evaluate(match, team, h2h, market) {
+  if (match.format < 5) return null;
+  const h2hMatches = h2h.results;
+  const avgMaps = h2hMatches.length > 0
+    ? h2hMatches.reduce((s,r) => s + (r.total_maps || 3), 0) / h2hMatches.length
+    : 3;
+  const prob = avgMaps > 3.5 ? 0.58 : 0.45;
+  if (prob > 0.54 && match.odds_over >= 1.6)
+    return { signal: true, market: 'over', prob, stake: market.kelly(match.odds_over, prob) * 0.35 };
+  return null;
+}`,
+    },
   },
 
   activeStrategies: [],
@@ -107,7 +233,6 @@ const backtestEngine = {
 
   saveActiveStrategies() {
     localStorage.setItem('bq_bt_strategies', JSON.stringify(this.activeStrategies));
-
     if (typeof telegramSettings !== 'undefined') {
       telegramSettings.strategies = this.activeStrategies;
       if (telegramSettings.tab === 'strategies') telegramSettings._renderTab();
@@ -148,8 +273,8 @@ const backtestEngine = {
             onchange="backtestEngine.updateSlot('${s.id}','name',this.value)">
           <select class="ctrl-select bt-slot-sport"
             onchange="backtestEngine.updateSlot('${s.id}','sport',this.value)">
-            ${['football','tennis','basketball','hockey','baseball'].map(sp =>
-              `<option value="${sp}" ${s.sport===sp?'selected':''}>${sp}</option>`
+            ${SPORT_OPTIONS.map(sp =>
+                `<option value="${sp.value}" ${s.sport===sp.value?'selected':''}>${sp.label}</option>`
             ).join('')}
           </select>
           <label class="toggle-switch" style="margin-left:auto">
@@ -264,14 +389,14 @@ const backtestEngine = {
     this.running = true;
     document.getElementById('btnRunBacktest').style.display = 'none';
     document.getElementById('btnStopBacktest').style.display = '';
-  
+
     const cfg = this.readConfig();
     const enabled = this.activeStrategies.filter(s => s.enabled);
     if (!enabled.length) { alert('Включи хотя бы одну стратегию'); this.stopUI(); return; }
-  
+
     this.showProgress(10, 'Компиляция стратегий...');
     const evalFns = enabled.map(s => ({ ...s, fn: this.compileStrategy(s.code) }));
-  
+
     this.showProgress(20, 'Загрузка данных из базы...');
     let matchesBySport;
     try {
@@ -281,24 +406,39 @@ const backtestEngine = {
       this._showDataError(err.message);
       return;
     }
-  
+
     const totalLoaded = Object.values(matchesBySport).reduce((s, arr) => s + arr.length, 0);
     if (totalLoaded === 0) {
       this.stopUI();
-      this._showDataError('Нет данных в базе. Запустите ETL для загрузки исторических матчей.');
+      const sportNames = enabled.map(s => s.sport);
+      fetch('/api/backtest/sports')
+        .then(r => r.json())
+        .then(stats => {
+          const available = Object.entries(stats)
+            .filter(([, v]) => v.hasData)
+            .map(([sp, v]) => `${v.label || sp}: ${v.count.toLocaleString()} матчей (${v.from}–${v.to})`);
+          const noData = sportNames.filter(sp => !stats[sp]?.hasData);
+          let msg = '';
+          if (noData.length) msg += `Нет данных для: <strong>${noData.join(', ')}</strong>. Запустите ETL.<br>`;
+          if (available.length) msg += `<br>Доступно в базе:<br>${available.map(a => `• ${a}`).join('<br>')}`;
+          this._showDataError(msg || 'Нет данных. Запустите ETL.');
+        })
+        .catch(() => {
+          this._showDataError('Нет данных в базе. Запустите ETL для загрузки исторических матчей.');
+        });
       return;
     }
-  
+
     this.showProgress(40, `Загружено ${totalLoaded} матчей, прогон бэктеста...`);
-  
+
     const result = this.parlayRules.length
       ? this.runParlayEngine(evalFns, matchesBySport, cfg)
       : this.runSinglesEngine(evalFns, matchesBySport, cfg);
-  
+
     this.showProgress(85, 'Отрисовка графиков...');
     this.displayResults(result, enabled);
     this.renderCharts(result);
-  
+
     this.showProgress(100, `Готово ✓ (${totalLoaded} матчей из БД)`);
     setTimeout(() => { const w = document.getElementById('btProgressWrap'); if(w) w.style.display='none'; }, 700);
     this.stopUI();
@@ -314,11 +454,11 @@ const backtestEngine = {
           sport,
           dateFrom: cfg.dateFrom || '2018-01-01',
           dateTo:   cfg.dateTo   || new Date().toISOString().slice(0, 10),
-          limit:    100000,
+          limit:    200000,
         });
         if (cfg.league && cfg.league !== 'all') params.set('league', cfg.league);
         if (cfg.season) params.set('season', cfg.season);
-  
+
         const resp = await fetch(`/api/backtest/matches?${params}`);
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({ error: resp.statusText }));
@@ -333,66 +473,188 @@ const backtestEngine = {
       }
     }
     return out;
-  }, 
-  
+  },
+
+  // ── ИСПРАВЛЕНИЕ 1: over25 и btts вычисляются здесь, а не в checkWin ──────
   _normalizeMatch(m, sport) {
     const base = {
       ...m,
       sport,
-      // Универсальные алиасы
-      team_home:   m.team_home  || m.home_team  || m.winner || '',
-      team_away:   m.team_away  || m.away_team  || m.loser  || '',
-      home_goals:  parseFloat(m.home_goals  ?? m.home_pts  ?? m.w_sets ?? 0),
-      away_goals:  parseFloat(m.away_goals  ?? m.away_pts  ?? m.l_sets ?? 0),
-      // Коэффициенты — нормализуем все варианты имён
-      odds_home:   parseFloat(m.odds_home   || m.b365_home   || m.b365_winner || m.avg_winner || 0),
-      odds_draw:   parseFloat(m.odds_draw   || m.b365_draw   || 0),
-      odds_away:   parseFloat(m.odds_away   || m.b365_away   || m.b365_loser  || m.avg_loser  || 0),
-      odds_over:   parseFloat(m.odds_over   || m.b365_over   || m.b365_over25 || 0),
-      odds_under:  parseFloat(m.odds_under  || m.b365_under  || m.b365_under25 || 0),
-      b365_home:   parseFloat(m.b365_home   || m.b365_winner || m.avg_winner  || 0),
-      b365_draw:   parseFloat(m.b365_draw   || 0),
-      b365_away:   parseFloat(m.b365_away   || m.b365_loser  || m.avg_loser   || 0),
-      b365_over25: parseFloat(m.b365_over25 || m.b365_over   || m.odds_over   || 0),
-      b365_under25:parseFloat(m.b365_under25 || m.b365_under || m.odds_under  || 0),
-      home_xg:     parseFloat(m.home_xg || m.home_xg_for || 0),
-      away_xg:     parseFloat(m.away_xg || m.away_xg_for || 0),
-      home_shots:  parseFloat(m.home_shots || 0),
-      away_shots:  parseFloat(m.away_shots || 0),
+      date: m.date || '',
+
+      team_home: m.home_team  || m.team_home || m.team1 || m.winner || '',
+      team_away: m.away_team  || m.team_away || m.team2 || m.loser  || '',
+
+      home_goals: parseFloat(
+        m.home_goals ?? m.home_pts  ?? m.home_score ??
+        m.home_sets  ?? m.score1    ?? m.home_runs  ??
+        m.team1_runs ?? m.w_sets    ?? 0
+      ),
+      away_goals: parseFloat(
+        m.away_goals ?? m.away_pts  ?? m.away_score ??
+        m.away_sets  ?? m.score2    ?? m.away_runs  ??
+        m.team2_runs ?? m.l_sets    ?? 0
+      ),
+
+      odds_home:  parseFloat(m.odds_home  || m.b365_home    || m.b365_winner || m.avg_winner || m.pin_home || 0),
+      odds_draw:  parseFloat(m.odds_draw  || m.b365_draw    || 0),
+      odds_away:  parseFloat(m.odds_away  || m.b365_away    || m.b365_loser  || m.avg_loser  || m.pin_away || 0),
+      odds_over:  parseFloat(m.odds_over  || m.b365_over25  || m.b365_over   || m.ou_sets_line || 0),
+      odds_under: parseFloat(m.odds_under || m.b365_under25 || m.b365_under  || 0),
+
+      b365_home:    parseFloat(m.b365_home    || m.b365_winner || 0),
+      b365_draw:    parseFloat(m.b365_draw    || 0),
+      b365_away:    parseFloat(m.b365_away    || m.b365_loser  || 0),
+      b365_over25:  parseFloat(m.b365_over25  || m.b365_over   || 0),
+      b365_under25: parseFloat(m.b365_under25 || m.b365_under  || 0),
+
+      home_xg:    parseFloat(m.home_xg    || m.home_xg_for || 0),
+      away_xg:    parseFloat(m.away_xg    || m.away_xg_for || 0),
+      home_shots: parseFloat(m.home_shots || 0),
+      away_shots: parseFloat(m.away_shots || 0),
     };
 
-    // ── Теннис: специальная нормализация ──────────────────────────────
+    // ── result ────────────────────────────────────────────────────────
+    if (m.result) {
+      const r = String(m.result).toUpperCase();
+      base.result = r === 'H' ? 'home' : r === 'A' ? 'away' : r === 'D' ? 'draw' :
+                    r === 'HOME' ? 'home' : r === 'AWAY' ? 'away' : 'draw';
+    } else {
+      base.result = base.home_goals > base.away_goals ? 'home'
+                  : base.home_goals < base.away_goals ? 'away'
+                  : 'draw';
+    }
+
+    // ── ИСПРАВЛЕНИЕ: over25 и btts вычисляем здесь (нужно для checkWin) ──
+    const totalGoals = base.home_goals + base.away_goals;
+    base.over25 = totalGoals > 2.5;
+    base.over15 = totalGoals > 1.5;
+    base.over35 = totalGoals > 3.5;
+    base.btts   = base.home_goals > 0 && base.away_goals > 0;
+
+    // ── Спорт-специфичные поля ────────────────────────────────────────
+
     if (sport === 'tennis') {
-      // result: 'home' означает победа winner (team_home)
-      base.result      = 'home';   // winner всегда побеждает в tennis_matches (это победитель матча)
-      base.winner      = m.winner  || '';
-      base.loser       = m.loser   || '';
-      // rank для стратегий
-      base.rank_home   = parseFloat(m.winner_rank || 0);
-      base.rank_away   = parseFloat(m.loser_rank  || 0);
-      // Odds для тенниса: winner = home, loser = away
-      if (!base.odds_home && m.b365_winner) base.odds_home = parseFloat(m.b365_winner);
-      if (!base.odds_away && m.b365_loser)  base.odds_away = parseFloat(m.b365_loser);
-      if (!base.odds_home && m.avg_winner)  base.odds_home = parseFloat(m.avg_winner);
-      if (!base.odds_away && m.avg_loser)   base.odds_away = parseFloat(m.avg_loser);
-      if (!base.odds_home && m.ps_winner)   base.odds_home = parseFloat(m.ps_winner);
-      if (!base.odds_away && m.ps_loser)    base.odds_away = parseFloat(m.ps_loser);
-      // Служебная статистика для стратегий
-      base.w_aces      = parseInt(m.w_aces  || 0);
-      base.l_aces      = parseInt(m.l_aces  || 0);
-      base.w_df        = parseInt(m.w_df    || 0);
-      base.l_df        = parseInt(m.l_df    || 0);
-      base.surface     = m.surface     || '';
-      base.round       = m.round       || '';
-      base.tournament  = m.tournament  || '';
-      base.sets_played = parseInt(m.sets_played || 0);
+      base.result     = 'home';
+      base.winner     = m.winner || base.team_home;
+      base.loser      = m.loser  || base.team_away;
+      base.rank_home  = parseFloat(m.winner_rank || 0);
+      base.rank_away  = parseFloat(m.loser_rank  || 0);
+      base.surface    = m.surface    || '';
+      base.round      = m.round      || '';
+      base.tournament = m.tournament || '';
+      base.sets_played= parseInt(m.sets_played || (parseInt(m.w_sets||0) + parseInt(m.l_sets||0)) || 0);
+      if (!base.odds_home && m.b365_winner)  base.odds_home = parseFloat(m.b365_winner);
+      if (!base.odds_away && m.b365_loser)   base.odds_away = parseFloat(m.b365_loser);
+      if (!base.odds_home && m.ps_winner)    base.odds_home = parseFloat(m.ps_winner);
+      if (!base.odds_away && m.ps_loser)     base.odds_away = parseFloat(m.ps_loser);
+      base.w_aces = parseInt(m.w_aces || 0);
+      base.l_aces = parseInt(m.l_aces || 0);
+      base.w_df   = parseInt(m.w_df   || 0);
+      base.l_df   = parseInt(m.l_df   || 0);
+    }
+
+    if (sport === 'volleyball') {
+      base.total_sets  = parseInt(m.total_sets  || base.home_goals + base.away_goals || 0);
+      base.total_points= parseInt(m.total_points|| (m.home_total_pts||0) + (m.away_total_pts||0) || 0);
+      base.home_hit_pct= parseFloat(m.home_hit_pct || 0);
+      base.away_hit_pct= parseFloat(m.away_hit_pct || 0);
+      base.home_aces   = parseInt(m.home_aces  || 0);
+      base.away_aces   = parseInt(m.away_aces  || 0);
+      base.home_kills  = parseInt(m.home_kills || 0);
+      base.away_kills  = parseInt(m.away_kills || 0);
+      base.home_blocks = parseInt(m.home_blocks_total || 0);
+      base.away_blocks = parseInt(m.away_blocks_total || 0);
+      base.gender      = m.gender      || '';
+      base.competition = m.competition || '';
+      base.ou_sets_line= parseFloat(m.ou_sets_line || 0);
+      // over/under для волейбола — по партиям
+      base.over25 = base.total_sets > 2.5;  // т.е. 3+ партий
+      base.over35 = base.total_sets > 3.5;  // 4+ партий
+    }
+
+    if (sport === 'nfl') {
+      base.week        = parseInt(m.week || 0);
+      base.season_type = m.season_type || 'REG';
+      base.overtime    = parseInt(m.overtime || 0);
+      base.home_q1 = parseInt(m.home_q1 || 0);  base.away_q1 = parseInt(m.away_q1 || 0);
+      base.home_q2 = parseInt(m.home_q2 || 0);  base.away_q2 = parseInt(m.away_q2 || 0);
+      base.home_q3 = parseInt(m.home_q3 || 0);  base.away_q3 = parseInt(m.away_q3 || 0);
+      base.home_q4 = parseInt(m.home_q4 || 0);  base.away_q4 = parseInt(m.away_q4 || 0);
+      base.total_line  = parseFloat(m.total_line || 0);
+      base.spread      = parseFloat(m.spread || 0);
+      base.home_epa    = parseFloat(m.home_epa_total || 0);
+      base.away_epa    = parseFloat(m.away_epa_total || 0);
+      base.home_turnovers   = parseInt(m.home_turnovers || 0);
+      base.away_turnovers   = parseInt(m.away_turnovers || 0);
+      base.home_first_downs = parseInt(m.home_first_downs || 0);
+      base.away_first_downs = parseInt(m.away_first_downs || 0);
+      // NFL: over по total_line
+      if (base.total_line > 0) {
+        base.over25 = totalGoals > base.total_line;
+      }
+      // NFL нет ничьих (почти)
+      if (base.result === 'draw' && base.home_goals !== base.away_goals) {
+        base.result = base.home_goals > base.away_goals ? 'home' : 'away';
+      }
+    }
+
+    if (sport === 'rugby') {
+      base.home_tries  = parseInt(m.home_tries || 0);
+      base.away_tries  = parseInt(m.away_tries || 0);
+      base.home_h1     = parseInt(m.home_h1_score || m.home_h1 || 0);
+      base.away_h1     = parseInt(m.away_h1_score || m.away_h1 || 0);
+      base.competition = m.competition || '';
+    }
+
+    if (sport === 'cricket') {
+      base.match_type  = m.match_type || m.format || '';
+      base.competition = m.competition || '';
+      base.venue       = m.venue       || '';
+    }
+
+    if (sport === 'basketball') {
+      base.home_q1 = parseInt(m.home_pts_q1 || m.home_q1 || 0);
+      base.home_q2 = parseInt(m.home_pts_q2 || m.home_q2 || 0);
+      base.home_q3 = parseInt(m.home_pts_q3 || m.home_q3 || 0);
+      base.home_q4 = parseInt(m.home_pts_q4 || m.home_q4 || 0);
+      base.away_q1 = parseInt(m.away_pts_q1 || m.away_q1 || 0);
+      base.away_q2 = parseInt(m.away_pts_q2 || m.away_q2 || 0);
+      base.away_q3 = parseInt(m.away_pts_q3 || m.away_q3 || 0);
+      base.away_q4 = parseInt(m.away_pts_q4 || m.away_q4 || 0);
+      base.went_to_ot = parseInt(m.went_to_ot || 0);
+      base.total_pts  = base.home_goals + base.away_goals;
+      // NBA тотал обычно 210+ очков
+      base.over25 = base.total_pts > 210;
+    }
+
+    if (sport === 'esports') {
+      base.game       = m.game       || m.discipline || '';
+      base.game_slug  = m.game_slug  || '';
+      base.league     = m.league     || '';
+      base.tier       = m.tier       || '';
+      base.format     = parseInt(m.format || 1);
+      base.total_maps = parseInt(m.score1 || 0) + parseInt(m.score2 || 0);
+      // over по картам
+      base.over25 = base.total_maps > 2.5;
+    }
+
+    if (sport === 'waterpolo') {
+      base.competition = m.competition || '';
+      base.home_q1 = parseInt(m.home_q1 || 0);  base.away_q1 = parseInt(m.away_q1 || 0);
+      base.home_q2 = parseInt(m.home_q2 || 0);  base.away_q2 = parseInt(m.away_q2 || 0);
+      base.home_q3 = parseInt(m.home_q3 || 0);  base.away_q3 = parseInt(m.away_q3 || 0);
+      base.home_q4 = parseInt(m.home_q4 || 0);  base.away_q4 = parseInt(m.away_q4 || 0);
     }
 
     return base;
   },
-  
+
   _showDataError(msg) {
+    // Удаляем предыдущие ошибки чтобы не накапливались
+    document.querySelectorAll('.bt-data-error').forEach(e => e.remove());
     const el = document.createElement('div');
+    el.className = 'bt-data-error';
     el.style.cssText = 'padding:24px;background:var(--bg2);border:1px solid var(--red,#f44);border-radius:8px;margin:16px';
     el.innerHTML = `
       <div style="font-size:16px;color:var(--red,#f44);margin-bottom:8px">❌ Нет данных для бэктеста</div>
@@ -407,8 +669,8 @@ const backtestEngine = {
 
   readConfig() {
     return {
-      dateFrom:    document.getElementById('btDateFrom')?.value   || '2020-01-01',
-      dateTo:      document.getElementById('btDateTo')?.value     || '2024-12-31',
+      dateFrom:    document.getElementById('btDateFrom')?.value   || '2018-01-01',
+      dateTo:      document.getElementById('btDateTo')?.value     || new Date().toISOString().slice(0,10),
       staking:     document.getElementById('btStaking')?.value    || 'half_kelly',
       bankroll:    parseFloat(document.getElementById('btBankroll')?.value)   || 1000,
       maxStakePct: parseFloat(document.getElementById('btMaxStake')?.value)   || 5,
@@ -426,26 +688,81 @@ const backtestEngine = {
     } catch(e) { return null; }
   },
 
+  // ── ИСПРАВЛЕНИЕ 2: makeTeamAPI — добавлены avgGoals и avgConceded ─────────
   makeTeamAPI(m, all) {
     return {
-      form: (name, n) => all.filter(x=>x.team_home===name||x.team_away===name).slice(-n)
-        .map(x => x.result==='draw'?'D':((x.team_home===name&&x.result==='home')||(x.team_away===name&&x.result==='away'))?'W':'L'),
-      goalsScored:   () => +(1.0+Math.random()*1.2).toFixed(2),
-      goalsConceded: () => +(0.8+Math.random()*1.0).toFixed(2),
-      xG:            () => +(1.0+Math.random()*0.9).toFixed(2),
+      form: (name, n) => all
+        .filter(x => x.team_home === name || x.team_away === name)
+        .slice(-n)
+        .map(x => x.result === 'draw' ? 'D' :
+          ((x.team_home === name && x.result === 'home') ||
+           (x.team_away === name && x.result === 'away')) ? 'W' : 'L'),
+
+      // Среднее забито за последние N матчей
+      avgGoals: (name, n = 5) => {
+        const recent = all
+          .filter(x => x.team_home === name || x.team_away === name)
+          .slice(-n);
+        if (!recent.length) return 0;
+        return recent.reduce((s, x) =>
+          s + (x.team_home === name ? x.home_goals : x.away_goals), 0
+        ) / recent.length;
+      },
+
+      // Среднее пропущено за последние N матчей
+      avgConceded: (name, n = 5) => {
+        const recent = all
+          .filter(x => x.team_home === name || x.team_away === name)
+          .slice(-n);
+        if (!recent.length) return 0;
+        return recent.reduce((s, x) =>
+          s + (x.team_home === name ? x.away_goals : x.home_goals), 0
+        ) / recent.length;
+      },
+
+      goalsScored:   (name, n = 5) => {
+        const recent = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
+        if (!recent.length) return +(1.0+Math.random()*1.2).toFixed(2);
+        return recent.reduce((s, x) =>
+          s + (x.team_home === name ? x.home_goals : x.away_goals), 0
+        ) / recent.length;
+      },
+
+      goalsConceded: (name, n = 5) => {
+        const recent = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
+        if (!recent.length) return +(0.8+Math.random()*1.0).toFixed(2);
+        return recent.reduce((s, x) =>
+          s + (x.team_home === name ? x.away_goals : x.home_goals), 0
+        ) / recent.length;
+      },
+
+      xG: (name, n = 5) => {
+        const recent = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
+        if (!recent.length) return +(1.0+Math.random()*0.9).toFixed(2);
+        const sum = recent.reduce((s, x) =>
+          s + (x.team_home === name ? (x.home_xg || x.home_goals) : (x.away_xg || x.away_goals)), 0
+        );
+        return sum / recent.length;
+      },
     };
   },
-  makeH2H: (m, all) => ({
-    results: all.filter(x =>
-      (x.team_home===m.team_home&&x.team_away===m.team_away)||
-      (x.team_home===m.team_away&&x.team_away===m.team_home)
-    ).slice(-8)
-  }),
-  makeMarketAPI: () => ({
-    implied: o => 1/o,
-    value:   (o,p) => p - 1/o,
-    kelly:   (o,p) => Math.max(0, ((o-1)*p-(1-p))/(o-1)),
-  }),
+
+  makeH2H(m, all) {
+    return {
+      results: all.filter(x =>
+        (x.team_home === m.team_home && x.team_away === m.team_away) ||
+        (x.team_home === m.team_away && x.team_away === m.team_home)
+      ).slice(-8),
+    };
+  },
+
+  makeMarketAPI() {
+    return {
+      implied: o => 1/o,
+      value:   (o, p) => p - 1/o,
+      kelly:   (o, p) => Math.max(0, ((o-1)*p-(1-p))/(o-1)),
+    };
+  },
 
   // ══════════════════════════════════════════════════════════════════════════
   //  SINGLES ENGINE
@@ -461,7 +778,7 @@ const backtestEngine = {
       const matches = matchesBySport[ev.sport] || [];
       for (const m of matches) {
         let sig = null;
-        try { sig = ev.fn(m, this.makeTeamAPI(m,matches), this.makeH2H(m,matches), this.makeMarketAPI()); } catch(e) {}
+        try { sig = ev.fn(m, this.makeTeamAPI(m, matches), this.makeH2H(m, matches), this.makeMarketAPI()); } catch(e) {}
         if (!sig?.signal) continue;
         const odds = m['odds_'+(sig.market||'home')];
         if (!odds || odds < cfg.minOdds || odds > cfg.maxOdds) continue;
@@ -482,7 +799,7 @@ const backtestEngine = {
         trades.push({
           date, type:'single',
           match: `${m.team_home} vs ${m.team_away}`,
-          sport: m.sport, league: m.league,
+          sport: m.sport, league: m.league || m.competition || '',
           strategyId: ev.id, strategyName: ev.name, strategyColor: ev.color,
           market: sig.market, odds, legs: 1,
           stake: stake.toFixed(2), won: won?'W':'L',
@@ -501,7 +818,6 @@ const backtestEngine = {
     const equity = [bank], trades = [];
     const ss = {}; evalFns.forEach(s => { ss[s.id]={bets:0,wins:0,pnl:0,stakes:0}; });
 
-    // Все сигналы по дате
     const signalsByDate = {};
     for (const ev of evalFns) {
       if (!ev.fn) continue;
@@ -522,14 +838,12 @@ const backtestEngine = {
     for (const date of Object.keys(signalsByDate).sort()) {
       const daySignals = signalsByDate[date];
 
-      // Обрабатываем каждое правило парлея
       for (const rule of this.parlayRules) {
         const cands = daySignals.filter(s =>
           (!rule.strategyIds?.length || rule.strategyIds.includes(s.ev.id))
         );
         if (cands.length < rule.minLegs) continue;
 
-        // Уникальные матчи
         const byMatch = {};
         for (const c of cands) {
           const k = c.m.team_home+'_'+c.m.team_away+'_'+c.ev.sport;
@@ -564,7 +878,7 @@ const backtestEngine = {
           date, type: `parlay_${legs.length}`,
           match: legs.map(l=>`${l.m.team_home} vs ${l.m.team_away}`).join(' + '),
           sport: [...new Set(legs.map(l=>l.ev.sport))].join('+'),
-          league: [...new Set(legs.map(l=>l.m.league))].join('+'),
+          league: [...new Set(legs.map(l=>l.m.league||l.m.competition||''))].join('+'),
           strategyId: legs.map(l=>l.ev.id).join(','),
           strategyName: legs.map(l=>l.ev.name).join(' × '),
           strategyColor: '#f59e0b',
@@ -581,7 +895,6 @@ const backtestEngine = {
         });
       }
 
-      // Одиночные для стратегий вне парлей
       for (const { m, sig, odds, ev } of daySignals) {
         if (allParlayStratIds.has(ev.id)) continue;
         if (!ev.fn) continue;
@@ -595,7 +908,7 @@ const backtestEngine = {
         trades.push({
           date, type:'single',
           match:`${m.team_home} vs ${m.team_away}`,
-          sport:m.sport, league:m.league,
+          sport:m.sport, league:m.league||m.competition||'',
           strategyId:ev.id, strategyName:ev.name, strategyColor:ev.color,
           market:sig.market, odds, legs:1,
           stake:stake.toFixed(2), won:won?'W':'L',
@@ -610,19 +923,22 @@ const backtestEngine = {
   calcStake(cfg, bank, odds, prob) {
     let s = bank * 0.02;
     const kelly = Math.max(0, ((odds-1)*prob-(1-prob))/(odds-1));
-    if (cfg.staking==='kelly')       s = bank * kelly;
+    if (cfg.staking==='kelly')           s = bank * kelly;
     else if (cfg.staking==='half_kelly') s = bank * kelly * 0.5;
-    else if (cfg.staking==='fixed_pct') s = bank * cfg.maxStakePct/100;
+    else if (cfg.staking==='fixed_pct')  s = bank * cfg.maxStakePct/100;
     return Math.min(Math.max(s, 0.01), bank * cfg.maxStakePct/100, bank);
   },
 
+  // ── ИСПРАВЛЕНИЕ 3: checkWin использует поля вычисленные в _normalizeMatch ──
   checkWin(m, market) {
-    if (market==='home')  return m.result==='home';
-    if (market==='away')  return m.result==='away';
-    if (market==='draw')  return m.result==='draw';
-    if (market==='over')  return m.over25;
-    if (market==='under') return !m.over25;
-    if (market==='btts')  return m.btts;
+    if (market === 'home')  return m.result === 'home';
+    if (market === 'away')  return m.result === 'away';
+    if (market === 'draw')  return m.result === 'draw';
+    if (market === 'over')  return m.over25 === true;
+    if (market === 'under') return m.over25 === false;
+    if (market === 'over15') return m.over15 === true;
+    if (market === 'over35') return m.over35 === true;
+    if (market === 'btts')  return m.btts === true;
     return false;
   },
 
@@ -759,7 +1075,6 @@ const backtestEngine = {
     const labels = eq.map((_,i)=>i);
     const hasParlays = result.trades?.some(t=>t.type?.startsWith('parlay'));
 
-    // Отдельные equity для ординаров и экспрессов
     let sb=eq[0], pb=eq[0];
     const seq=[eq[0]], peq=[eq[0]];
     result.trades?.forEach(t => {
@@ -777,14 +1092,12 @@ const backtestEngine = {
       options:{...base, plugins:{legend:{display:hasParlays,labels:{color:tc,boxWidth:12,font:{size:11}}}}},
     });
 
-    // Drawdown
     let peak=eq[0]; const dd=eq.map(v=>{if(v>peak) peak=v; return peak>0?-((peak-v)/peak*100):0;});
     this.charts.dd = new Chart(document.getElementById('chartBtDrawdown'),{
       type:'line',data:{labels,datasets:[{data:dd,borderColor:'#ff4560',backgroundColor:'rgba(255,69,96,0.1)',borderWidth:1.5,pointRadius:0,fill:true}]},
       options:{...base,scales:{...base.scales,y:{...base.scales.y,max:0}}},
     });
 
-    // Monthly PnL
     const monthly={};
     result.trades?.forEach(t=>{const k=(t.date||'').substring(0,7);if(k) monthly[k]=(monthly[k]||0)+parseFloat(t.pnl);});
     const mk=Object.keys(monthly).sort();
@@ -793,7 +1106,6 @@ const backtestEngine = {
       options:base,
     });
 
-    // Odds distribution
     const singles=(result.trades||[]).filter(t=>t.type==='single').map(t=>t.odds||1);
     const parlays=(result.trades||[]).filter(t=>t.type?.startsWith('parlay')).map(t=>t.odds||1);
     const bins=Array(12).fill(0); const pb2=Array(12).fill(0);
