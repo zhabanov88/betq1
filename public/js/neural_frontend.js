@@ -356,32 +356,69 @@ const neuralPanel = {
 
   _buildMatchForm(sport) {
     const oddsFields = this._oddsFieldsForSport(sport);
+    const homePh = sport==='tennis' ? 'Djokovic' : sport==='esports' ? 'Team Vitality' : 'Arsenal';
+    const awayPh = sport==='tennis' ? 'Medvedev'  : sport==='esports' ? 'NAVI'          : 'Chelsea';
+    const homeLabel = sport==='tennis' ? 'Игрок 1 (Фаворит)' : 'Хозяева';
+    const awayLabel = sport==='tennis' ? 'Игрок 2 (Андердог)' : 'Гости';
+
     return `
       <div class="nn-match-form">
-        <div class="nn-mf-title">🔍 Анализ матча — ${this.sportName(sport)}</div>
-        <div class="nn-mf-sub">Введите данные матча. Коэффициенты необязательны, но улучшают value-расчёт.</div>
+        <!-- ── Title row ── -->
+        <div class="nn-mf-header">
+          <div>
+            <div class="nn-mf-title">🔍 Анализ матча — ${this.sportName(sport)}</div>
+            <div class="nn-mf-sub">Введите данные матча или выберите реальный матч. Коэффициенты улучшают value-расчёт.</div>
+          </div>
+          <button class="nn-btn sm live-btn" onclick="neuralPanel.openLivePicker('${sport}')" title="Выбрать из реальных матчей">
+            🔴 Реальные матчи
+          </button>
+        </div>
 
+        <!-- ── Tournament autocomplete ── -->
+        <div class="nn-mf-row" style="margin-bottom:8px">
+          <div class="nn-mf-field" style="max-width:360px">
+            <label>🏆 Турнир / Лига <span style="font-size:10px;color:var(--text3)">(фильтрует команды)</span></label>
+            <div class="nn-ac-wrap">
+              <input type="text" id="mf-league" placeholder="Поиск лиги..."
+                     class="nn-input" autocomplete="off"
+                     oninput="neuralPanel._onLeagueInput('${sport}', this.value)"
+                     onfocus="neuralPanel._onLeagueInput('${sport}', this.value)"
+                     onblur="setTimeout(()=>neuralPanel._hideAc('mf-league-ac'),200)">
+              <div class="nn-ac-dropdown" id="mf-league-ac"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Teams row ── -->
         <div class="nn-mf-row">
           <div class="nn-mf-field">
-            <label>🏠 ${sport==='tennis'?'Игрок 1 (Фаворит)':'Хозяева'}</label>
-            <input type="text" id="mf-home" placeholder="${sport==='tennis'?'Djokovic':'Arsenal'}" class="nn-input">
+            <label>🏠 ${homeLabel}</label>
+            <div class="nn-ac-wrap">
+              <input type="text" id="mf-home" placeholder="${homePh}" class="nn-input" autocomplete="off"
+                     oninput="neuralPanel._onTeamInput('${sport}', 'mf-home', 'mf-home-ac', this.value)"
+                     onfocus="neuralPanel._onTeamInput('${sport}', 'mf-home', 'mf-home-ac', this.value)"
+                     onblur="setTimeout(()=>neuralPanel._hideAc('mf-home-ac'),200)"
+                     onkeydown="neuralPanel._acKeydown(event,'mf-home-ac')">
+              <div class="nn-ac-dropdown" id="mf-home-ac"></div>
+            </div>
           </div>
           <div class="nn-mf-vs">VS</div>
           <div class="nn-mf-field">
-            <label>✈️ ${sport==='tennis'?'Игрок 2 (Андердог)':'Гости'}</label>
-            <input type="text" id="mf-away" placeholder="${sport==='tennis'?'Medvedev':'Chelsea'}" class="nn-input">
+            <label>✈️ ${awayLabel}</label>
+            <div class="nn-ac-wrap">
+              <input type="text" id="mf-away" placeholder="${awayPh}" class="nn-input" autocomplete="off"
+                     oninput="neuralPanel._onTeamInput('${sport}', 'mf-away', 'mf-away-ac', this.value)"
+                     onfocus="neuralPanel._onTeamInput('${sport}', 'mf-away', 'mf-away-ac', this.value)"
+                     onblur="setTimeout(()=>neuralPanel._hideAc('mf-away-ac'),200)"
+                     onkeydown="neuralPanel._acKeydown(event,'mf-away-ac')">
+              <div class="nn-ac-dropdown" id="mf-away-ac"></div>
+            </div>
           </div>
           <div class="nn-mf-field" style="max-width:160px">
             <label>📅 Дата</label>
             <input type="date" id="mf-date" value="${new Date().toISOString().slice(0,10)}" class="nn-input">
           </div>
         </div>
-
-        ${sport === 'football' ? `
-        <div class="nn-mf-row">
-          <div class="nn-mf-field"><label>Лига</label>
-            <input type="text" id="mf-league" placeholder="E0 / SP1 / D1" class="nn-input"></div>
-        </div>` : ''}
 
         ${oddsFields.length ? `
         <div class="nn-mf-section">Коэффициенты (необязательно)</div>
@@ -401,7 +438,7 @@ const neuralPanel = {
           <button class="nn-btn outline" onclick="neuralPanel._clearMatchResult()">✕ Очистить</button>
         </div>
 
-        <!-- Filter bar (скрыт до результата) -->
+        <!-- Filter bar -->
         <div id="nn-market-filters" style="display:none" class="nn-filter-bar">
           <span class="nn-filter-label">Фильтры:</span>
           <label class="nn-filter-check">
@@ -424,6 +461,276 @@ const neuralPanel = {
         </div>
       </div>
     `;
+  },
+
+  // ── AUTOCOMPLETE — внутренние данные ────────────────────────────────────
+  _acCache: {},   // { sport_teams: [...], sport_leagues: [...] }
+  _acLeagueFilter: null,
+
+  async _fetchTeams(sport) {
+    const key = `teams_${sport}`;
+    if (this._acCache[key]) return this._acCache[key];
+    try {
+      const league = this._acLeagueFilter || '';
+      const url = `/api/stats/teams?sport=${sport}&limit=200${league?'&league='+encodeURIComponent(league):''}`;
+      const d = await fetch(url, { credentials:'include' }).then(r=>r.json());
+      const names = [...new Set((d.teams||[]).map(t=>t.team||t.name).filter(Boolean))].sort();
+      // кешируем без лига-фильтра чтобы не дублировать
+      if (!league) this._acCache[key] = names;
+      return names;
+    } catch { return []; }
+  },
+
+  async _fetchLeagues(sport) {
+    const key = `leagues_${sport}`;
+    if (this._acCache[key]) return this._acCache[key];
+    try {
+      const d = await fetch(`/api/stats/leagues?sport=${sport}`, { credentials:'include' }).then(r=>r.json());
+      const list = (d.leagues||[]).map(l=>({ code: l.code, label: l.label||l.code, matches: l.matches }));
+      this._acCache[key] = list;
+      return list;
+    } catch { return []; }
+  },
+
+  async _onTeamInput(sport, inputId, dropId, val) {
+    const q = (val||'').trim().toLowerCase();
+    const teams = await this._fetchTeams(sport);
+    const filtered = q.length === 0
+      ? teams.slice(0, 12)
+      : teams.filter(t => t.toLowerCase().includes(q)).slice(0, 12);
+    this._showAcDropdown(dropId, filtered.map(t=>({label:t,sub:''})), name => {
+      const el = document.getElementById(inputId);
+      if (el) { el.value = name; el.dispatchEvent(new Event('change')); }
+      this._hideAc(dropId);
+    });
+  },
+
+  async _onLeagueInput(sport, val) {
+    const q = (val||'').trim().toLowerCase();
+    const leagues = await this._fetchLeagues(sport);
+    const filtered = q.length === 0
+      ? leagues.slice(0, 10)
+      : leagues.filter(l => l.label.toLowerCase().includes(q) || l.code.toLowerCase().includes(q)).slice(0, 10);
+    this._showAcDropdown('mf-league-ac', filtered.map(l=>({
+      label: l.label, sub: `${l.code} · ${l.matches} матчей`,
+    })), (name, item) => {
+      const el = document.getElementById('mf-league');
+      if (el) el.value = name;
+      // Сбрасываем кеш команд чтобы фильтровать по выбранной лиге
+      const tKey = `teams_${sport}`;
+      delete this._acCache[tKey];
+      this._acLeagueFilter = item?.code || name;
+      this._hideAc('mf-league-ac');
+    });
+  },
+
+  _showAcDropdown(dropId, items, onSelect) {
+    const drop = document.getElementById(dropId);
+    if (!drop) return;
+    if (!items.length) { drop.innerHTML=''; drop.style.display='none'; return; }
+    drop.style.display = 'block';
+    drop.innerHTML = items.map((item, i) => `
+      <div class="nn-ac-item" data-idx="${i}" tabindex="-1"
+           onmousedown="event.preventDefault()"
+           onclick="neuralPanel._acSelect('${dropId}',${i})">
+        <span class="nn-ac-label">${item.label}</span>
+        ${item.sub ? `<span class="nn-ac-sub">${item.sub}</span>` : ''}
+      </div>
+    `).join('');
+    // Store items for selection
+    drop._items = items;
+    drop._onSelect = onSelect;
+  },
+
+  _acSelect(dropId, idx) {
+    const drop = document.getElementById(dropId);
+    if (!drop || !drop._items) return;
+    const item = drop._items[idx];
+    if (drop._onSelect) drop._onSelect(item.label, item);
+  },
+
+  _hideAc(dropId) {
+    const drop = document.getElementById(dropId);
+    if (drop) { drop.style.display = 'none'; drop.innerHTML = ''; }
+  },
+
+  _acKeydown(event, dropId) {
+    const drop = document.getElementById(dropId);
+    if (!drop || drop.style.display === 'none') return;
+    const items = drop.querySelectorAll('.nn-ac-item');
+    let active = drop.querySelector('.nn-ac-item.active');
+    const idx = active ? +active.dataset.idx : -1;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = items[Math.min(idx+1, items.length-1)];
+      if (active) active.classList.remove('active');
+      if (next) next.classList.add('active');
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const prev = items[Math.max(idx-1, 0)];
+      if (active) active.classList.remove('active');
+      if (prev) prev.classList.add('active');
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (active) active.click();
+    } else if (event.key === 'Escape') {
+      this._hideAc(dropId);
+    }
+  },
+
+  // ── LIVE MATCH PICKER ────────────────────────────────────────────────────
+  async openLivePicker(sport) {
+    // Создаём модал сразу со спиннером
+    const modal = document.createElement('div');
+    modal.className = 'nn-modal-overlay';
+    modal.id = 'nn-live-picker';
+    modal.innerHTML = `
+      <div class="nn-modal nn-live-modal">
+        <div class="nn-modal-header">
+          <div class="nn-modal-title">🔴 Выбор реального матча</div>
+          <button onclick="document.getElementById('nn-live-picker').remove()" class="nn-modal-close">✕</button>
+        </div>
+        <div class="nn-live-filter-row">
+          <input type="text" id="nlp-search" placeholder="Поиск команды или турнира..."
+                 class="nn-input" oninput="neuralPanel._filterLivePicker(this.value)" style="flex:1">
+          <div class="nn-live-tabs" id="nlp-tabs">
+            <button class="nn-filter-btn active" onclick="neuralPanel._filterLiveByStatus(this,'all')">Все</button>
+            <button class="nn-filter-btn" onclick="neuralPanel._filterLiveByStatus(this,'live')">🔴 Live</button>
+            <button class="nn-filter-btn" onclick="neuralPanel._filterLiveByStatus(this,'scheduled')">📅 Скоро</button>
+          </div>
+        </div>
+        <div id="nlp-body" class="nn-live-picker-body">
+          <div class="nn-loading-block"><div class="nn-loading-spinner"></div><div>Загрузка матчей...</div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    // Загружаем матчи
+    try {
+      const d = await fetch('/api/live/matches', { credentials:'include' }).then(r=>r.json());
+      let matches = (d.matches || []);
+      // Если нет матчей нужного вида спорта, показываем все
+      const sportMatches = matches.filter(m => m.sport === sport);
+      if (sportMatches.length > 0) matches = sportMatches;
+      // Сохраняем для фильтрации
+      modal._allMatches = matches;
+      modal._sport = sport;
+      modal._statusFilter = 'all';
+      neuralPanel._renderLivePickerBody(matches, sport);
+    } catch(e) {
+      const body = document.getElementById('nlp-body');
+      if (body) body.innerHTML = `<div class="nn-error-block">❌ ${e.message}<br><small>Проверьте что сервер запущен</small></div>`;
+    }
+  },
+
+  _renderLivePickerBody(matches, sport) {
+    const body = document.getElementById('nlp-body');
+    if (!body) return;
+    if (!matches.length) {
+      body.innerHTML = `
+        <div class="nn-empty">
+          <div style="font-size:32px">📭</div>
+          <div>Нет доступных матчей</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:6px">
+            Проверьте что настроены API-ключи в .env<br>
+            или подождите — матчи появятся ближе к игровому дню
+          </div>
+        </div>`;
+      return;
+    }
+
+    // Группируем по лиге
+    const byLeague = {};
+    matches.forEach(m => {
+      const lg = m.league || 'Другое';
+      if (!byLeague[lg]) byLeague[lg] = [];
+      byLeague[lg].push(m);
+    });
+
+    body.innerHTML = Object.entries(byLeague).map(([league, ms]) => `
+      <div class="nn-lp-league-group" data-league="${league}">
+        <div class="nn-lp-league-header">${ms[0].country ? ms[0].country+' · ' : ''}${league}</div>
+        ${ms.map(m => {
+          const isLive = m.status === 'live';
+          const isFin  = m.status === 'finished';
+          const time   = m.startTime ? new Date(m.startTime).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '';
+          return `
+            <div class="nn-lp-match" data-id="${m.id}" data-status="${m.status}"
+                 data-home="${(m.home||'').toLowerCase()}" data-away="${(m.away||'').toLowerCase()}"
+                 data-league="${league.toLowerCase()}"
+                 onclick="neuralPanel._pickLiveMatch('${sport}', ${JSON.stringify(m).replace(/"/g,'&quot;')})">
+              <div class="nn-lp-status">
+                ${isLive ? `<span class="nn-live-dot"></span><span class="nn-lp-min">${m.minute}'</span>`
+                         : isFin ? `<span style="color:var(--text3);font-size:10px">Завершён</span>`
+                         : `<span style="color:var(--text3);font-size:11px">${time}</span>`}
+              </div>
+              <div class="nn-lp-teams">
+                <span class="nn-lp-home">${m.home || '?'}</span>
+                <span class="nn-lp-score">${isLive||isFin ? `${m.homeScore??0}:${m.awayScore??0}` : 'vs'}</span>
+                <span class="nn-lp-away">${m.away || '?'}</span>
+              </div>
+              <div class="nn-lp-odds">
+                ${m.odds?.home ? `<span class="nn-lp-odd">${m.odds.home}</span>` : ''}
+                ${m.odds?.draw ? `<span class="nn-lp-odd">${m.odds.draw}</span>` : ''}
+                ${m.odds?.away ? `<span class="nn-lp-odd">${m.odds.away}</span>` : ''}
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    `).join('');
+  },
+
+  _filterLivePicker(q) {
+    const modal = document.getElementById('nn-live-picker');
+    if (!modal) return;
+    const all = modal._allMatches || [];
+    const qLow = (q||'').toLowerCase();
+    const status = modal._statusFilter || 'all';
+    const filtered = all.filter(m => {
+      const matchesQ = !qLow ||
+        (m.home||'').toLowerCase().includes(qLow) ||
+        (m.away||'').toLowerCase().includes(qLow) ||
+        (m.league||'').toLowerCase().includes(qLow);
+      const matchesSt = status === 'all' || m.status === status;
+      return matchesQ && matchesSt;
+    });
+    this._renderLivePickerBody(filtered, modal._sport);
+  },
+
+  _filterLiveByStatus(btn, status) {
+    const modal = document.getElementById('nn-live-picker');
+    if (!modal) return;
+    modal._statusFilter = status;
+    document.querySelectorAll('#nlp-tabs .nn-filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const q = document.getElementById('nlp-search')?.value || '';
+    this._filterLivePicker(q);
+  },
+
+  _pickLiveMatch(sport, match) {
+    // Заполняем форму данными из live-матча
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    setVal('mf-home',   match.home);
+    setVal('mf-away',   match.away);
+    setVal('mf-league', match.league || '');
+    setVal('mf-date',   match.startTime ? match.startTime.slice(0,10) : new Date().toISOString().slice(0,10));
+
+    // Коэффициенты из live-данных
+    if (match.odds) {
+      setVal('mf-b365h', match.odds.home   || match.odds.home_win);
+      setVal('mf-b365d', match.odds.draw);
+      setVal('mf-b365a', match.odds.away   || match.odds.away_win);
+      setVal('mf-b365o25', match.odds.over25 || match.odds.over_2_5);
+    }
+
+    // Сбрасываем кеш команд для нового лига-фильтра
+    this._acLeagueFilter = match.league || null;
+    delete this._acCache[`teams_${sport}`];
+
+    // Закрываем пикер
+    document.getElementById('nn-live-picker')?.remove();
+    this.showToast(`✅ Выбран: ${match.home} vs ${match.away}`, 'success');
   },
 
   _oddsFieldsForSport(sport) {
