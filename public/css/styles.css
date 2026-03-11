@@ -966,3 +966,74 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   margin-bottom: 12px;
 }
 
+/* Тултипы на метриках бэктеста */
+[title] { cursor: help; }
+[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a2035;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #c8d0e0;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  max-width: 220px;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+[title] { position: relative; }
+
+/* ── Бэктест: графики и таблица ────────────────────────────────── */
+
+/* Equity — высокий график */
+#chartBtEquity { height: 220px !important; max-height: 220px !important; }
+
+/* Три нижних — фиксированная высота */
+#chartBtDrawdown,
+#chartBtMonthly,
+#chartBtDistrib { height: 160px !important; max-height: 160px !important; }
+
+/* Все chart-card — не сжимаются */
+.chart-card {
+  min-height: 0;
+  overflow: visible;
+}
+.chart-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/* Таблица ставок — прокрутка */
+#btTradesTable {
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+#btTradesTable .data-table {
+  min-width: 900px; /* горизонтальный скролл если узко */
+}
+#btTradesTable .data-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 2;
+}
+
+/* Правая панель результатов бэктеста — своя прокрутка */
+#panel-backtest .bt-results-col,
+#panel-backtest .panel-right {
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+}

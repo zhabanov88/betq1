@@ -62,56 +62,83 @@ function checkWin(m, market) {
 }
 
 function calcStake(cfg, bank, odds, prob) {
-  const kelly = Math.max(0, ((odds - 1) * prob - (1 - prob)) / (odds - 1));
-  let s = bank * 0.02;
-  if (cfg.staking === 'kelly')           s = bank * kelly;
-  else if (cfg.staking === 'half_kelly') s = bank * kelly * 0.5;
-  else if (cfg.staking === 'fixed_pct')  s = bank * (cfg.maxStakePct || 2) / 100;
-  return Math.min(Math.max(s, 0.01), bank * (cfg.maxStakePct || 5) / 100, bank);
-}
+    // Защита от некорректных входных значений
+    const safeOdds = Math.max(1.01, isFinite(odds) ? odds : 1.5);
+    const safeProb = Math.min(0.99, Math.max(0.01, isFinite(prob) ? prob : 0.5));
+    const safeBank = Math.max(0, isFinite(bank) ? bank : 0);
+    
+    const maxPct = Math.min((cfg.maxStakePct || 5), 10) / 100; // не более 10% банкролла
+    
+    const kelly = ((safeOdds - 1) * safeProb - (1 - safeProb)) / (safeOdds - 1);
+    const safeKelly = Math.max(0, Math.min(kelly, 0.25)); // Kelly не более 25%
+    
+    let s;
+    if (cfg.staking === 'kelly')           s = safeBank * safeKelly;
+    else if (cfg.staking === 'half_kelly') s = safeBank * safeKelly * 0.5;
+    else if (cfg.staking === 'fixed_pct')  s = safeBank * maxPct;
+    else s = safeBank * 0.02; // flat 2% по умолчанию
+    
+    // Жёсткий лимит: не более maxStakePct% банкролла и не более 25% абсолютно
+    return Math.min(Math.max(s, 0.01), safeBank * maxPct, safeBank * 0.25);
+  }
 
-function makeTeamAPI(m, all) {
-  return {
-    form: (name, n = 5) => all
-      .filter(x => x.team_home === name || x.team_away === name).slice(-n)
-      .map(x => x.result === 'draw' ? 'D' :
+// Строим индексы один раз на весь массив матчей
+function buildIndexes(matches) {
+    const byTeam = {};  // team → [match, ...]
+    const byH2H  = {};  // "home_away" → [match, ...]
+    for (const m of matches) {
+      for (const t of [m.team_home, m.team_away]) {
+        if (!byTeam[t]) byTeam[t] = [];
+        byTeam[t].push(m);
+      }
+      const key1 = m.team_home + '|||' + m.team_away;
+      const key2 = m.team_away + '|||' + m.team_home;
+      if (!byH2H[key1]) byH2H[key1] = [];
+      if (!byH2H[key2]) byH2H[key2] = [];
+      byH2H[key1].push(m);
+      byH2H[key2].push(m);
+    }
+    return { byTeam, byH2H };
+  }
+  
+  function makeTeamAPI(m, idx) {
+    const get = (name, n) => (idx.byTeam[name] || []).slice(-n);
+    return {
+      form: (name, n = 5) => get(name, n).map(x =>
+        x.result === 'draw' ? 'D' :
         ((x.team_home === name && x.result === 'home') ||
          (x.team_away === name && x.result === 'away')) ? 'W' : 'L'),
-    goalsScored: (name, n = 5) => {
-      const r = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
-      return r.length ? r.reduce((s, x) => s + (x.team_home === name ? x.home_goals : x.away_goals), 0) / r.length : 1.2;
-    },
-    goalsConceded: (name, n = 5) => {
-      const r = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
-      return r.length ? r.reduce((s, x) => s + (x.team_home === name ? x.away_goals : x.home_goals), 0) / r.length : 1.0;
-    },
-    avgGoals: (name, n = 5) => {
-      const r = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
-      return r.length ? r.reduce((s, x) => s + (x.team_home === name ? x.home_goals : x.away_goals), 0) / r.length : 1.2;
-    },
-    xG: (name, n = 5) => {
-      const r = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
-      return r.length ? r.reduce((s, x) => s + (x.team_home === name ? (x.home_xg || x.home_goals) : (x.away_xg || x.away_goals)), 0) / r.length : 1.1;
-    },
-    avgPts: (name, n = 5) => {
-      const r = all.filter(x => x.team_home === name || x.team_away === name).slice(-n);
-      return r.length ? r.reduce((s, x) => s + (x.team_home === name ? (x.home_goals || 105) : (x.away_goals || 100)), 0) / r.length : 105;
-    },
-    rank: (name) => {
-      const last = all.filter(x => x.team_home === name || x.team_away === name).slice(-1)[0];
-      return last ? (last.team_home === name ? (last.rank_home || 50) : (last.rank_away || 50)) : 100;
-    },
-  };
-}
-
-function makeH2H(m, all) {
-  return {
-    results: all.filter(x =>
-      (x.team_home === m.team_home && x.team_away === m.team_away) ||
-      (x.team_home === m.team_away && x.team_away === m.team_home)
-    ).slice(-8),
-  };
-}
+      goalsScored: (name, n = 5) => {
+        const r = get(name, n);
+        return r.length ? r.reduce((s, x) => s + (x.team_home === name ? x.home_goals : x.away_goals), 0) / r.length : 1.2;
+      },
+      goalsConceded: (name, n = 5) => {
+        const r = get(name, n);
+        return r.length ? r.reduce((s, x) => s + (x.team_home === name ? x.away_goals : x.home_goals), 0) / r.length : 1.0;
+      },
+      avgGoals: (name, n = 5) => {
+        const r = get(name, n);
+        return r.length ? r.reduce((s, x) => s + (x.team_home === name ? x.home_goals : x.away_goals), 0) / r.length : 1.2;
+      },
+      xG: (name, n = 5) => {
+        const r = get(name, n);
+        return r.length ? r.reduce((s, x) => s + (x.team_home === name ? (x.home_xg || x.home_goals) : (x.away_xg || x.away_goals)), 0) / r.length : 1.1;
+      },
+      avgPts: (name, n = 5) => {
+        const r = get(name, n);
+        return r.length ? r.reduce((s, x) => s + (x.team_home === name ? (x.home_goals || 105) : (x.away_goals || 100)), 0) / r.length : 105;
+      },
+      rank: (name) => {
+        const last = (idx.byTeam[name] || []).slice(-1)[0];
+        return last ? (last.team_home === name ? (last.rank_home || 50) : (last.rank_away || 50)) : 100;
+      },
+    };
+  }
+  
+  function makeH2H(m, idx) {
+    const key = m.team_home + '|||' + m.team_away;
+    return { results: (idx.byH2H[key] || []).slice(-8) };
+  }
 
 function makeMarketAPI() {
   return {
@@ -151,9 +178,13 @@ function calcStats(trades, startBank, equity) {
   const sharpe = stdR > 0 ? +(avgR / stdR * Math.sqrt(252)).toFixed(3) : 0;
 
   // P-value (simplified z-test)
-  const z = stdR > 0 ? avgR / (stdR / Math.sqrt(trades.length)) : 0;
-  const pValue = z > 0 ? Math.max(0, 1 - (0.5 * (1 + Math.sign(z) * Math.sqrt(1 - Math.exp(-2 * z * z / Math.PI))))) : 1;
-
+  // Z-score и p-value
+  const z = (stdR > 0 && n > 1) ? +(avgR / (stdR / Math.sqrt(n))).toFixed(3) : 0;
+  const absZ = Math.abs(z);
+  // Приближение нормального распределения
+  const pValue = absZ > 0
+    ? +Math.max(0, 2 * (1 - (0.5 * (1 + Math.sign(absZ) * (1 - Math.exp(-0.7 * absZ * absZ))))).toFixed(4))
+    : 1;
   // Monthly PnL
   const monthly = {};
   trades.forEach(t => {
@@ -229,7 +260,7 @@ const SPORT_CFG = {
   esports:    { table: 'betquant.esports_matches',     leagueCol: 'league',      seasonCol: null },
 };
 
-async function loadMatches(clickhouse, sport, { dateFrom, dateTo, league, season } = {}) {
+async function loadMatches(clickhouse, sport, { dateFrom, dateTo, league, season, limit = 50000 } = {}) {
   const sc = SPORT_CFG[sport] || SPORT_CFG.football;
   let table = sc.table;
 
@@ -242,15 +273,17 @@ async function loadMatches(clickhouse, sport, { dateFrom, dateTo, league, season
     } catch { table = sc.fallback; }
   }
 
+  // Для эспорта нет поля date — пропускаем фильтр по дате
+  const hasDate = !['esports'].includes(sport);
   const parts = ['1=1'];
   if (league && sc.leagueCol) parts.push(`${sc.leagueCol} = '${String(league).replace(/'/g,"''")}'`);
   if (season && sc.seasonCol) parts.push(`${sc.seasonCol} = '${String(season).replace(/'/g,"''")}'`);
-  if (dateFrom) parts.push(`date >= '${dateFrom}'`);
-  if (dateTo)   parts.push(`date <= '${dateTo}'`);
+  if (hasDate && dateFrom) parts.push(`date >= '${dateFrom}'`);
+  if (hasDate && dateTo)   parts.push(`date <= '${dateTo}'`);
   const where = 'WHERE ' + parts.join(' AND ');
 
   const r = await clickhouse.query({
-    query: `SELECT * FROM ${table} ${where} ORDER BY date ASC LIMIT 200000`,
+    query: `SELECT * FROM ${table} ${where} ORDER BY date ASC LIMIT ${limit}`,
     format: 'JSON',
   });
   const d = await r.json();
@@ -261,6 +294,7 @@ async function loadMatches(clickhouse, sport, { dateFrom, dateTo, league, season
 //  POST /api/bt/run  — полный бэктест на сервере
 // ═══════════════════════════════════════════════════════════════════
 router.post('/run', async (req, res) => {
+  res.setTimeout(120000); // 2 минуты максимум
   const { strategies = [], cfg = {}, parlayRules = [] } = req.body;
   const clickhouse = req.app.locals.clickhouse;
 
@@ -270,13 +304,15 @@ router.post('/run', async (req, res) => {
   try {
     // Загружаем матчи по каждому виду спорта
     const sports = [...new Set(strategies.map(s => s.sport || 'football'))];
+    const MATCH_LIMIT = 50000; // максимум на спорт
     const matchesBySport = {};
     for (const sport of sports) {
       matchesBySport[sport] = await loadMatches(clickhouse, sport, {
-        dateFrom: cfg.dateFrom || '2018-01-01',
+        dateFrom: cfg.dateFrom || '2020-01-01',  // по умолчанию с 2020, не с 2018
         dateTo:   cfg.dateTo   || new Date().toISOString().slice(0, 10),
         league:   cfg.league && cfg.league !== 'all' ? cfg.league : null,
         season:   cfg.season || null,
+        limit:    MATCH_LIMIT,
       });
     }
 
@@ -300,50 +336,51 @@ router.post('/run', async (req, res) => {
 });
 
 function runSinglesEngine(evalFns, matchesBySport, cfg) {
-  let bank = cfg.bankroll || 1000;
-  const equity = [bank], trades = [];
-  const ss = {};
-  evalFns.forEach(s => { ss[s.id] = { bets: 0, wins: 0, pnl: 0, stakes: 0, name: s.name, sport: s.sport, color: s.color }; });
-
-  const signalsByDate = {};
-  for (const ev of evalFns) {
-    const matches = matchesBySport[ev.sport] || [];
-    for (const m of matches) {
-      let sig = null;
-      try { sig = ev.fn(m, makeTeamAPI(m, matches), makeH2H(m, matches), makeMarketAPI()); } catch (e) {}
-      if (!sig?.signal) continue;
-      const mk  = String(sig.market || 'home').toLowerCase().replace('_win', '');
-      const odds = m[`odds_${mk}`] || m.odds_home;
-      if (!odds || odds < (cfg.minOdds || 1.1) || odds > (cfg.maxOdds || 20)) continue;
-      if (!signalsByDate[m.date]) signalsByDate[m.date] = [];
-      signalsByDate[m.date].push({ m, sig, odds, ev });
+    let bank = cfg.bankroll || 1000;
+    const equity = [bank], trades = [];
+    const ss = {};
+    evalFns.forEach(s => { ss[s.id] = { bets:0, wins:0, pnl:0, stakes:0, name:s.name, sport:s.sport, color:s.color }; });
+  
+    const signalsByDate = {};
+    for (const ev of evalFns) {
+      const matches = matchesBySport[ev.sport] || [];
+      const idx = buildIndexes(matches);   // ← O(n) один раз
+      for (const m of matches) {
+        let sig = null;
+        try { sig = ev.fn(m, makeTeamAPI(m, idx), makeH2H(m, idx), makeMarketAPI()); } catch (e) {}
+        if (!sig?.signal) continue;
+        const mk   = String(sig.market || 'home').toLowerCase().replace('_win', '');
+        const odds = m[`odds_${mk}`] || m.odds_home;
+        if (!odds || odds < (cfg.minOdds || 1.1) || odds > (cfg.maxOdds || 20)) continue;
+        if (!signalsByDate[m.date]) signalsByDate[m.date] = [];
+        signalsByDate[m.date].push({ m, sig, odds, ev });
+      }
     }
-  }
-
-  for (const date of Object.keys(signalsByDate).sort()) {
-    for (const { m, sig, odds, ev } of signalsByDate[date]) {
-      const stake = calcStake(cfg, bank, odds, sig.prob || 0.5);
-      if (stake < 0.01) continue;
-      const won = checkWin(m, sig.market);
-      const pnl = won ? stake * (odds - 1) * (1 - (cfg.commission || 0) / 100) : -stake;
-      bank = Math.max(0, bank + pnl);
-      equity.push(bank);
-      const s = ss[ev.id];
-      if (s) { s.bets++; s.stakes += stake; s.pnl += pnl; if (won) s.wins++; }
-      trades.push({
-        date, type: 'single',
-        match: `${m.team_home} vs ${m.team_away}`,
-        sport: m.sport, league: m.league || m.competition || m.league_code || '',
-        strategyId: ev.id, strategyName: ev.name, strategyColor: ev.color || '#00d4ff',
-        market: sig.market, odds, legs: 1,
-        stake: +stake.toFixed(2), won: won ? 'W' : 'L',
-        pnl: +pnl.toFixed(2), bankroll: +bank.toFixed(2),
-      });
+  
+    for (const date of Object.keys(signalsByDate).sort()) {
+      for (const { m, sig, odds, ev } of signalsByDate[date]) {
+        const stake = calcStake(cfg, bank, odds, sig.prob || 0.5);
+        if (stake < 0.01) continue;
+        const won = checkWin(m, sig.market);
+        const pnl = won ? stake * (odds - 1) * (1 - (cfg.commission || 0) / 100) : -stake;
+        bank = Math.max(0, bank + pnl);
+        equity.push(bank);
+        const s = ss[ev.id];
+        if (s) { s.bets++; s.stakes += stake; s.pnl += pnl; if (won) s.wins++; }
+        trades.push({
+          date, type: 'single',
+          match: `${m.team_home} vs ${m.team_away}`,
+          sport: m.sport, league: m.league || m.competition || m.league_code || '',
+          strategyId: ev.id, strategyName: ev.name, strategyColor: ev.color || '#00d4ff',
+          market: sig.market, odds, legs: 1,
+          stake: +stake.toFixed(2), won: won ? 'W' : 'L',
+          pnl: +pnl.toFixed(2), bankroll: +bank.toFixed(2),
+        });
+      }
     }
+  
+    return { trades, equity, stratStats: ss, stats: calcStats(trades, cfg.bankroll || 1000, equity) };
   }
-
-  return { trades, equity, stratStats: ss, stats: calcStats(trades, cfg.bankroll || 1000, equity) };
-}
 
 function runParlayEngine(evalFns, matchesBySport, cfg, parlayRules) {
   let bank = cfg.bankroll || 1000;

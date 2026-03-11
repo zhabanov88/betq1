@@ -275,18 +275,18 @@
 
                     <!-- KPI -->
                     <div class="bt-stats-grid" id="btStatsGrid">
-                        <div class="bt-stat"><div class="bt-stat-label">Ставок</div><div class="bt-stat-val" id="bts-bets">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Тип</div><div class="bt-stat-val" style="font-size:11px" id="bts-types">—</div></div>
-                        <div class="bt-stat highlight"><div class="bt-stat-label">ROI %</div><div class="bt-stat-val" id="bts-roi">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Прибыль</div><div class="bt-stat-val" id="bts-profit">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Win %</div><div class="bt-stat-val" id="bts-winrate">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Sharpe</div><div class="bt-stat-val" id="bts-sharpe">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Max DD</div><div class="bt-stat-val" id="bts-maxdd">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Avg CLV</div><div class="bt-stat-val" id="bts-clv">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">P-value</div><div class="bt-stat-val" id="bts-pval">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Avg Odds</div><div class="bt-stat-val" id="bts-avgodds">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Strike</div><div class="bt-stat-val" id="bts-strike">—</div></div>
-                        <div class="bt-stat"><div class="bt-stat-label">Z-Score</div><div class="bt-stat-val" id="bts-expected">—</div></div>
+                        <div class="bt-stat"><div title="Колличество ставок по стратегиям" class="bt-stat-label">Ставок</div><div class="bt-stat-val" id="bts-bets">—</div></div>
+                        <div class="bt-stat"><div title="Тип ставок" class="bt-stat-label">Тип</div><div class="bt-stat-val" style="font-size:11px" id="bts-types">—</div></div>
+                        <div class="bt-stat highlight"><div title="Return on Investment — прибыль / объём ставок × 100. Выше 5% — хорошо, выше 15% — отлично" class="bt-stat-label">ROI %</div><div class="bt-stat-val" id="bts-roi">—</div></div>
+                        <div class="bt-stat"><div  title="Абсолютная прибыль в единицах банкролла за весь период тестирования" class="bt-stat-label">Прибыль</div><div class="bt-stat-val" id="bts-profit">—</div></div>
+                        <div class="bt-stat"><div title="Процент выигрышных ставок. При среднем коэффициенте 2.0 нужно больше 52%" class="bt-stat-label">Win %</div><div class="bt-stat-val" id="bts-winrate">—</div></div>
+                        <div class="bt-stat"><div title="Sharpe Ratio — доходность делённая на риск. Выше 1 хорошо, выше 2 отлично, ниже 0 убыточно" class="bt-stat-label">Sharpe</div><div class="bt-stat-val" id="bts-sharpe">—</div></div>
+                        <div class="bt-stat"><div title="Максимальная просадка от пика банкролла в %. До 20% — норма, выше 40% — высокий риск" class="bt-stat-label">Max DD</div><div class="bt-stat-val" id="bts-maxdd">—</div></div>
+                        <div class="bt-stat"><div title="Closing Line Value — насколько ваши коэффициенты лучше финальных линий букмекера. Плюс = долгосрочный edge" class="bt-stat-label">Avg CLV</div><div class="bt-stat-val" id="bts-clv">—</div></div>
+                        <div class="bt-stat"><div title="Статистическая значимость результата. Меньше 0.05 = результат не случаен, меньше 0.01 = высокая уверенность" class="bt-stat-label">P-value</div><div class="bt-stat-val" id="bts-pval">—</div></div>
+                        <div class="bt-stat"><div title="Средний коэффициент по всем ставкам. Влияет на дисперсию и необходимый win rate" class="bt-stat-label">Avg Odds</div><div class="bt-stat-val" id="bts-avgodds">—</div></div>
+                        <div class="bt-stat"><div title="Strike Rate = процент выигрышных ставок. Аналог Win %" class="bt-stat-label">Strike</div><div class="bt-stat-val" id="bts-strike">—</div></div>
+                        <div class="bt-stat"><div title="Z-статистика: выше 2 — статистически значимо (p меньше 0.05), выше 3 — очень значимо" class="bt-stat-label">Z-Score</div><div class="bt-stat-val" id="bts-expected">—</div></div>
                     </div>
 
                     <!-- Per-strategy breakdown -->
@@ -297,19 +297,40 @@
 
                     <!-- Equity -->
                     <div class="chart-card">
-                        <div class="chart-card-header"><span>Equity Curve (общий + экспрессы)</span></div>
+                        <div class="chart-card-header">
+                            <span>Equity Curve (общий + экспрессы)</span>
+                            <span style="color:var(--text3);font-size:11px">Рост банкролла по каждой ставке</span>
+                        </div>
                         <canvas id="chartBtEquity" height="200"></canvas>
                     </div>
 
                     <!-- 3 графика -->
                     <div class="chart-grid-3col">
-                        <div class="chart-card"><div class="chart-card-header"><span>Просадка</span></div><canvas id="chartBtDrawdown" height="140"></canvas></div>
-                        <div class="chart-card"><div class="chart-card-header"><span>Месячный PnL</span></div><canvas id="chartBtMonthly" height="140"></canvas></div>
-                        <div class="chart-card"><div class="chart-card-header"><span>Распределение коэф.</span></div><canvas id="chartBtDistrib" height="140"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header">
+                            <span>Просадка</span>
+                            <span style="color:var(--text3);font-size:11px">% падение от пика</span>
+                        </div><canvas id="chartBtDrawdown" height="140"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header">
+                            <span>Месячный PnL</span>
+                            <span style="color:var(--text3);font-size:11px">Прибыль/убыток по месяцам</span>
+                        </div><canvas id="chartBtMonthly" height="140"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header">
+                            <span>Распределение коэф.</span>
+                            <span style="color:var(--text3);font-size:11px">Частота коэффициентов</span>
+                        </div><canvas id="chartBtDistrib" height="140"></canvas></div>
                     </div>
 
                     <!-- Таблица ставок -->
-                    <div class="data-table-container" id="btTradesTable"></div>
+                    <div style="margin-top:16px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <div>
+                                <span style="font-weight:600">📋 Таблица ставок</span>
+                                <span style="color:var(--text3);font-size:11px;margin-left:8px">Последние 300 ставок · нажми на строку для деталей</span>
+                            </div>
+                            <button class="ctrl-btn sm" onclick="backtestEngine.exportTrades()">⬇ Экспорт CSV</button>
+                        </div>
+                        <div class="data-table-container" id="btTradesTable" style="max-height:400px;overflow-y:auto;overflow-x:auto"></div>
+                    </div>
                 </div>
             </div>
         </div>

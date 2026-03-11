@@ -665,6 +665,56 @@ const backtestEngine = {
       base.home_q4 = parseInt(m.home_q4 || 0);  base.away_q4 = parseInt(m.away_q4 || 0);
     }
 
+    // Спорт-специфичные правки result и over
+  if (sport === 'basketball') {
+    // В баскетболе нет ничьей, result всегда H или A
+    const r = String(m.result || '').trim().toUpperCase();
+    base.result = (r === 'H' || r === 'HOME' || r === '1') ? 'home' : 'away';
+    // over для баскетбола — по очкам (типичная линия 210+)
+    const totalPts = base.home_goals + base.away_goals;
+    base.over25  = totalPts > 210;  // переопределяем
+    base.over15  = totalPts > 190;
+    base.over35  = totalPts > 230;
+  }
+  
+  if (sport === 'hockey') {
+    const totalG = base.home_goals + base.away_goals;
+    base.over25 = totalG > 5.5;  // хоккейная линия
+    base.over15 = totalG > 4.5;
+    base.over35 = totalG > 6.5;
+    // went_to_ot
+    base.ot = parseInt(m.went_to_ot || 0) === 1;
+  }
+  
+  if (sport === 'tennis') {
+    // В теннисе всегда победитель = home
+    base.result   = 'home';
+    base.team_home = m.winner || m.home_team || '';
+    base.team_away = m.loser  || m.away_team || '';
+    base.odds_home = parseFloat(m.b365w || m.b365_winner || m.ps_winner || m.odds_home || 0);
+    base.odds_away = parseFloat(m.b365l || m.b365_loser  || m.ps_loser  || m.odds_away || 0);
+  }
+  
+  if (sport === 'baseball') {
+    base.result = base.home_goals > base.away_goals ? 'home' : 'away';
+    const totalRuns = base.home_goals + base.away_goals;
+    base.over25 = totalRuns > 8.5;
+    base.over15 = totalRuns > 7.5;
+  }
+  
+  if (sport === 'volleyball') {
+    // sets: home_sets, away_sets
+    base.home_goals = parseFloat(m.home_sets || 0);
+    base.away_goals = parseFloat(m.away_sets || 0);
+    base.result = base.home_goals > base.away_goals ? 'home' : 'away';
+    base.over25 = (base.home_goals + base.away_goals) > 3.5; // партии
+    base.total_sets = base.home_goals + base.away_goals;
+  }
+  
+  if (sport === 'esports') {
+    const w = String(m.winner || '').trim();
+    base.result = (w === m.team1 || w === base.team_home) ? 'home' : 'away';
+  }
     return base;
   },
 
@@ -1032,8 +1082,18 @@ const backtestEngine = {
   //  DISPLAY
   // ══════════════════════════════════════════════════════════════════════════
   displayResults(result, strategies) {
+    this._lastResult = result;
     if (!result?.stats) return;
+
     const s = result.stats;
+    // ── Форматирование: не более 3 знаков ──
+    const fmtVal = (v) => {
+      const n = parseFloat(v);
+      if (isNaN(n)) return v;
+      if (Number.isInteger(n)) return String(n);
+      return n.toFixed(Math.min(3, (String(v).split('.')[1] || '').length));
+    };
+    
     const map = { 'bts-bets':s.bets,'bts-winrate':s.winRate,'bts-roi':s.roi,'bts-profit':s.profit,
       'bts-yield':s.yield,'bts-sharpe':s.sharpe,'bts-maxdd':s.maxDD,'bts-clv':s.clv,
       'bts-pval':s.pval,'bts-avgodds':s.avgOdds,'bts-strike':s.strike,'bts-expected':s.zscore };
@@ -1073,29 +1133,25 @@ const backtestEngine = {
         lbl.appendChild(q);
       }
     }
-    // ── Форматирование: не более 3 знаков ──
-    const fmtVal = (v) => {
-      const n = parseFloat(v);
-      if (isNaN(n)) return v;
-      if (Number.isInteger(n)) return String(n);
-      return n.toFixed(Math.min(3, (String(v).split('.')[1] || '').length));
-    };
 
     // ── Резюме стратегии ──
     const sr = result.stats;
     if (sr) {
       let verdict = '', emoji = '📊', color = '#8892a4';
-      const roi = parseFloat(sr.roi), sharpe = parseFloat(sr.sharpe),
-            pval = parseFloat(sr.pval), bets = parseInt(sr.bets),
-            maxdd = parseFloat(sr.maxDD || sr.maxdd || 0);
+      const roi    = isFinite(parseFloat(s.roi))    ? parseFloat(s.roi)    : 0;
+      const sharpe = isFinite(parseFloat(s.sharpe)) ? parseFloat(s.sharpe) : 0;
+      const pval   = isFinite(parseFloat(s.pval || s.pValue)) ? parseFloat(s.pval || s.pValue) : 1;
+      const bets   = parseInt(s.bets) || 0;
+      const maxdd  = isFinite(parseFloat(s.maxDD || s.maxdd)) ? parseFloat(s.maxDD || s.maxdd) : 0;
+
       if (roi > 15 && sharpe > 1.5 && pval < 0.05) {
-        verdict = `ROI ${roi.toFixed(1)}% статистически значим (p=${pval.toFixed(3)}), Sharpe ${sharpe.toFixed(2)} — стабильная стратегия. Рекомендуется к применению.`;
+        verdict = `ROI ${roi.toFixed(1)}% статистически значим (p=${(isFinite(pval) ? pval.toFixed(3) : 'N/A')}), Sharpe ${sharpe.toFixed(2)} — стабильная стратегия. Рекомендуется к применению.`;
         emoji = '🏆'; color = '#00e676';
       } else if (roi > 5 && pval < 0.1) {
         verdict = `ROI ${roi.toFixed(1)}% перспективен, Sharpe ${sharpe.toFixed(2)}. Протестируй на новом периоде и оптимизируй параметры.`;
         emoji = '✅'; color = '#ffd740';
       } else if (roi > 0) {
-        verdict = `ROI ${roi.toFixed(1)}% положительный, но p=${pval.toFixed(3)} — статистически незначим (нужно 200+ ставок). Текущих: ${bets}.`;
+        verdict = `ROI ${roi.toFixed(1)}% положительный, но p=${(isFinite(pval) ? pval.toFixed(3) : 'N/A')} — статистически незначим (нужно 200+ ставок). Текущих: ${bets}.`;
         emoji = '⚠️'; color = '#ff9800';
       } else {
         verdict = `Убыточная стратегия. ROI ${roi.toFixed(1)}%, просадка ${maxdd.toFixed(1)}%. Пересмотри условия входа.`;
@@ -1118,7 +1174,7 @@ const backtestEngine = {
           <div style="font-size:15px;font-weight:700;color:${color};margin-bottom:6px">${emoji} Вердикт</div>
           <div style="color:var(--text1);line-height:1.5;margin-bottom:${warns.length ? '8px' : '0'}">${verdict}</div>
           ${warns.map(w => `<div style="color:var(--text2);font-size:12px;margin-top:4px">${w}</div>`).join('')}
-          <button onclick="app.showPanel('ai-strategy')" style="margin-top:10px;padding:5px 12px;border:none;border-radius:6px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:white;font-size:12px;font-weight:600;cursor:pointer">
+          <button onclick="backtestEngine.sendToAI()" style="margin-top:10px;padding:5px 12px;border:none;border-radius:6px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:white;font-size:12px;font-weight:600;cursor:pointer">
             🤖 Улучшить в AI стратегии
           </button>
         </div>`;
@@ -1243,6 +1299,90 @@ const backtestEngine = {
     });
   },
 
+  sendToAI() {
+    const result   = this._lastResult;
+    const strat    = this.activeStrategies.find(s => s.enabled);
+    if (!strat) { app.showPanel('ai-strategy'); return; }
+
+    const s = result?.stats || {};
+    const trades = result?.trades || [];
+
+    // Формируем сводку последних 20 ставок
+    const tradeSample = trades.slice(-20).map(t =>
+      `${t.date} | ${t.match} | ${t.market} | odds ${t.odds} | ${t.won} | PnL ${t.pnl}`
+    ).join('\n');
+
+    // Месячная разбивка
+    const monthly = s.monthly || {};
+    const monthlyText = Object.entries(monthly)
+      .map(([m, v]) => `${m}: ${v > 0 ? '+' : ''}${parseFloat(v).toFixed(0)}`)
+      .join(', ');
+
+    const prompt = `Проанализируй стратегию и предложи конкретные улучшения.
+
+## Стратегия: ${strat.name} (${strat.sport})
+
+\`\`\`javascript
+${strat.code}
+\`\`\`
+
+## Результаты бэктеста (${s.bets || 0} ставок)
+- ROI: ${parseFloat(s.roi || 0).toFixed(2)}%
+- Win Rate: ${parseFloat(s.winRate || 0).toFixed(1)}%
+- Sharpe Ratio: ${parseFloat(s.sharpe || 0).toFixed(2)}
+- Max Drawdown: ${parseFloat(s.maxDD || 0).toFixed(1)}%
+- Средний коэффициент: ${parseFloat(s.avgOdds || 0).toFixed(2)}
+- P-value: ${s.pval || s.pValue || '—'}
+- Z-Score: ${s.zscore || s.zScore || '—'}
+- Прибыль: ${parseFloat(s.profit || 0).toFixed(0)}
+
+## Месячный PnL
+${monthlyText || 'нет данных'}
+
+## Последние 20 ставок
+\`\`\`
+${tradeSample || 'нет данных'}
+\`\`\`
+
+## Задача
+1. Найди слабые места в логике стратегии
+2. Предложи улучшенную версию кода с объяснением каждого изменения
+3. Укажи оптимальные диапазоны параметров
+4. Оцени реалистичность результатов (не overfitting ли это?)`;
+
+    app.showPanel('ai-strategy');
+    setTimeout(() => {
+      // Пробуем разные возможные id инпута
+      const inp = document.getElementById('aiUserInput')
+                || document.getElementById('aiInput')
+                || document.querySelector('.ai-chat-input textarea')
+                || document.querySelector('#ai-strategy textarea');
+      if (inp) {
+        inp.value = prompt;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      // Пробуем автоотправить
+      if (typeof aiStrategy !== 'undefined') {
+        if (aiStrategy.send)        aiStrategy.send(prompt);
+        else if (aiStrategy.submit) aiStrategy.submit(prompt);
+      }
+    }, 400);
+  },
+  exportTrades() {
+    const trades = this._lastResult?.trades;
+    if (!trades?.length) { alert('Нет данных для экспорта'); return; }
+    const headers = ['date','match','sport','league','strategy','market','odds','stake','result','pnl','bankroll'];
+    const rows = trades.map(t => [
+      t.date, `"${t.match}"`, t.sport, t.league || '',
+      `"${t.strategyName}"`, t.market, t.odds, t.stake, t.won, t.pnl, t.bankroll,
+    ].join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `backtest_${Date.now()}.csv`;
+    a.click();
+  },
   destroyCharts() { Object.values(this.charts).forEach(c=>{try{c.destroy();}catch(e){}}); this.charts={}; },
   stop() { this.running=false; this.stopUI(); },
   stopUI() {
