@@ -3,28 +3,48 @@ const walkForward = {
   charts:  {},
   running: false,
 
-  run() {
+  async run() {
     if (this.running) return;
     this.running = true;
     const btn = document.getElementById('wfRunBtn') || document.querySelector('[onclick="walkForward.run()"]');
-    if (btn) { btn.textContent = '⏳ Running...'; btn.style.pointerEvents = 'none'; }
+    if (btn) { btn.textContent = '⏳ Анализ...'; btn.style.pointerEvents = 'none'; }
 
-    const cfg = {
-      windowSize: parseInt(document.getElementById('wfWindowSize')?.value  || document.getElementById('wfWindows')?.value  || 5),
-      inSample:   parseFloat(document.getElementById('wfInSample')?.value || 70) / 100,
-      bankroll:   parseFloat(document.getElementById('wfBankroll')?.value  || 1000),
-      anchored:   document.getElementById('wfAnchored')?.checked || false,
-    };
+    const activeStrat = typeof backtestEngine !== 'undefined'
+      ? (backtestEngine.activeStrategies || []).find(s => s.enabled) : null;
+    const sumEl = document.getElementById('wfSummary');
 
-    setTimeout(() => {
-      try {
-        const result = this.simulate(cfg);
-        this.displayResults(result);
-        this.renderCharts(result);
-      } catch(e) { console.error('[WalkForward]', e); }
+    if (!activeStrat) {
+      if (sumEl) sumEl.innerHTML = '<div style="color:#ff9800;padding:8px">⚠️ Добавьте стратегию в Движке бэктеста</div>';
       this.running = false;
       if (btn) { btn.textContent = '▶ Run'; btn.style.pointerEvents = ''; }
-    }, 80);
+      return;
+    }
+
+    if (sumEl) sumEl.innerHTML = '<div style="color:var(--text3);padding:8px">⏳ Walk-forward на реальных данных...</div>';
+
+    try {
+      const resp = await fetch('/api/bt/walkforward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategy: { name: activeStrat.name, sport: activeStrat.sport, code: activeStrat.code },
+          cfg: { bankroll: parseFloat(document.getElementById('wfBankroll')?.value) || 1000, dateFrom: '2019-01-01', dateTo: new Date().toISOString().slice(0,10) },
+          wfCfg: {
+            windowSize: parseInt(document.getElementById('wfWindowSize')?.value || document.getElementById('wfWindows')?.value) || 6,
+            inSample: parseFloat(document.getElementById('wfInSample')?.value) || 70,
+            anchored: document.getElementById('wfAnchored')?.checked || false,
+          },
+        }),
+      });
+      const d = await resp.json();
+      if (d.error) throw new Error(d.error);
+      this.displayResults({ windows: d.windows, overallPnL: 0 });
+      this.renderCharts({ windows: d.windows, overallPnL: 0 });
+    } catch(e) {
+      if (sumEl) sumEl.innerHTML = `<div style="color:var(--red)">❌ ${e.message}</div>`;
+    }
+    this.running = false;
+    if (btn) { btn.textContent = '▶ Run'; btn.style.pointerEvents = ''; }
   },
 
   simulate(cfg) {

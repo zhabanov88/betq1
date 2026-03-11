@@ -2,59 +2,55 @@
 const monteCarlo = {
   charts: {},
   
-  run() {
-    const simCount = parseInt(document.getElementById('mcSimCount').value);
-    const betsPerRun = parseInt(document.getElementById('mcBetsPerRun').value);
-    const startBankroll = parseFloat(document.getElementById('mcBankroll').value);
-    const winRate = parseFloat(document.getElementById('mcWinRate').value) / 100;
-    const avgOdds = parseFloat(document.getElementById('mcAvgOdds').value);
-    const stakePct = parseFloat(document.getElementById('mcStake').value) / 100;
-    const ruinThreshold = parseFloat(document.getElementById('mcRuinThreshold').value) / 100;
-    
-    const allPaths = [];
-    const finalBankrolls = [];
-    let ruinCount = 0;
-    const ruinByBet = Array(betsPerRun).fill(0);
-    
-    for (let s = 0; s < simCount; s++) {
-      let bank = startBankroll;
-      const path = [bank];
-      let ruined = false;
-      for (let b = 0; b < betsPerRun; b++) {
-        const stake = bank * stakePct;
-        const won = Math.random() < winRate;
-        bank = Math.max(0, won ? bank + stake * (avgOdds - 1) : bank - stake);
-        path.push(bank);
-        if (!ruined && bank <= startBankroll * ruinThreshold) {
-          ruined = true;
-          ruinCount++;
-          for (let rb = b; rb < betsPerRun; rb++) ruinByBet[rb]++;
-        }
-      }
-      if (s < 500) allPaths.push(path);
-      finalBankrolls.push(bank);
+  async run() {
+    const simCount      = parseInt(document.getElementById('mcSimCount')?.value) || 5000;
+    const betsPerRun    = parseInt(document.getElementById('mcBetsPerRun')?.value) || 500;
+    const startBankroll = parseFloat(document.getElementById('mcBankroll')?.value) || 1000;
+    const winRate       = parseFloat(document.getElementById('mcWinRate')?.value) || 52;
+    const avgOdds       = parseFloat(document.getElementById('mcAvgOdds')?.value) || 2.0;
+    const stakePct      = parseFloat(document.getElementById('mcStake')?.value) || 2;
+    const ruinThreshold = parseFloat(document.getElementById('mcRuinThreshold')?.value) || 50;
+
+    const sumEl = document.getElementById('mcSummary');
+    if (sumEl) sumEl.innerHTML = '<div style="color:var(--text3);padding:8px">⏳ Симуляция на сервере...</div>';
+
+    const activeStrat = typeof backtestEngine !== 'undefined'
+      ? (backtestEngine.activeStrategies || []).find(s => s.enabled) : null;
+
+    try {
+      const resp = await fetch('/api/bt/montecarlo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategy: activeStrat ? { sport: activeStrat.sport, code: activeStrat.code } : null,
+          cfg: { bankroll: startBankroll, dateFrom: '2020-01-01', dateTo: new Date().toISOString().slice(0,10) },
+          mcCfg: { simCount, betsPerRun, ruinThreshold: ruinThreshold/100, winRate, avgOdds, stakePct },
+        }),
+      });
+      const d = await resp.json();
+      if (d.error) throw new Error(d.error);
+
+      const { paths, finals, ruinByBet, percentiles: pc, avg, ruinProbability, realStats } = d;
+      const { p5, p25, p50, p75, p95 } = pc;
+
+      const srcNote = realStats?.tradesUsed > 10
+        ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">📊 На основе ${realStats.tradesUsed} реальных ставок (WR ${(realStats.winRate*100).toFixed(1)}%, avg odds ${realStats.avgOdds.toFixed(2)})</div>` : '';
+
+      if (sumEl) sumEl.innerHTML = srcNote + `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><span style="color:var(--text3)">Медиана:</span><br><strong style="color:var(--accent)">${p50.toFixed(0)}</strong></div>
+          <div><span style="color:var(--text3)">Среднее:</span><br><strong>${avg.toFixed(0)}</strong></div>
+          <div><span style="color:var(--text3)">P5 (худшие 5%):</span><br><strong style="color:var(--red)">${p5.toFixed(0)}</strong></div>
+          <div><span style="color:var(--text3)">P95 (лучшие 5%):</span><br><strong style="color:var(--green)">${p95.toFixed(0)}</strong></div>
+          <div><span style="color:var(--text3)">Вер. руина:</span><br><strong style="color:${ruinProbability>20?'var(--red)':'var(--green)'}">${ruinProbability.toFixed(1)}%</strong></div>
+          <div><span style="color:var(--text3)">ROI:</span><br><strong style="color:${avg>startBankroll?'var(--green)':'var(--red)'}">${((avg-startBankroll)/startBankroll*100).toFixed(1)}%</strong></div>
+        </div>`;
+
+      this.renderCharts(paths.slice(0,300), finals, ruinByBet, d.betsPerRun, d.simCount, startBankroll, p5, p25, p50, p75, p95);
+    } catch(e) {
+      if (sumEl) sumEl.innerHTML = `<div style="color:var(--red)">❌ ${e.message}</div>`;
+      console.error('[MC]', e);
     }
-    
-    finalBankrolls.sort((a,b)=>a-b);
-    const p5 = finalBankrolls[Math.floor(simCount*0.05)];
-    const p25 = finalBankrolls[Math.floor(simCount*0.25)];
-    const p50 = finalBankrolls[Math.floor(simCount*0.50)];
-    const p75 = finalBankrolls[Math.floor(simCount*0.75)];
-    const p95 = finalBankrolls[Math.floor(simCount*0.95)];
-    const avg = finalBankrolls.reduce((s,v)=>s+v,0)/simCount;
-    const ruinProbability = ruinCount/simCount*100;
-    
-    document.getElementById('mcSummary').innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div><span style="color:var(--text3)">Median Final:</span><br><strong style="color:var(--accent)">${p50.toFixed(0)}</strong></div>
-        <div><span style="color:var(--text3)">Avg Final:</span><br><strong>${avg.toFixed(0)}</strong></div>
-        <div><span style="color:var(--text3)">P5 (worst 5%):</span><br><strong style="color:var(--red)">${p5.toFixed(0)}</strong></div>
-        <div><span style="color:var(--text3)">P95 (best 5%):</span><br><strong style="color:var(--green)">${p95.toFixed(0)}</strong></div>
-        <div><span style="color:var(--text3)">Ruin Probability:</span><br><strong style="color:${ruinProbability>20?'var(--red)':'var(--green)'}">${ruinProbability.toFixed(1)}%</strong></div>
-        <div><span style="color:var(--text3)">Expected ROI:</span><br><strong style="color:${avg>startBankroll?'var(--green)':'var(--red)'}">${((avg-startBankroll)/startBankroll*100).toFixed(1)}%</strong></div>
-      </div>`;
-    
-    this.renderCharts(allPaths, finalBankrolls, ruinByBet, betsPerRun, simCount, startBankroll, p5, p25, p50, p75, p95);
   },
   
   renderCharts(paths, finals, ruinByBet, betsPerRun, simCount, start, p5, p25, p50, p75, p95) {

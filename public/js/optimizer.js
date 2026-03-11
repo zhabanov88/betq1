@@ -32,42 +32,66 @@ const optimizer = {
   
   async run() {
     if (!this.params.length) { this.addParam(); this.addParam(); }
-    const method = document.getElementById('optMethod').value;
-    const objective = document.getElementById('optObjective').value;
-    const progress = document.getElementById('optProgress');
-    const bar = document.getElementById('optProgressBar');
-    const txt = document.getElementById('optProgressText');
-    progress.style.display='';
-    
-    const p1 = this.params[0] || {name:'minOdds',min:1.3,max:3.0,step:0.1};
-    const p2 = this.params[1] || {name:'minEdge',min:0,max:10,step:1};
-    
-    const results = [];
-    const v1s = this.range(p1.min, p1.max, p1.step);
-    const v2s = this.range(p2.min, p2.max, p2.step);
-    const total = v1s.length * v2s.length;
-    let done = 0;
-    
-    for (const v1 of v1s) {
-      for (const v2 of v2s) {
-        const roi = this.simulateRoi(v1, v2, objective);
-        results.push({ [p1.name]: v1.toFixed(2), [p2.name]: v2.toFixed(2), roi: roi.toFixed(2), sharpe: (roi/10+Math.random()).toFixed(2), bets: Math.floor(50+Math.random()*200) });
-        done++;
-        if (done % 20 === 0) {
-          bar.style.setProperty('--progress', (done/total*100)+'%');
-          txt.textContent = `${method === 'genetic' ? 'Genetic Algorithm' : 'Grid Search'}: ${done}/${total} combinations`;
-          await new Promise(r => setTimeout(r, 0));
-        }
-      }
+    const method    = document.getElementById('optMethod')?.value    || 'grid';
+    const objective = document.getElementById('optObjective')?.value || 'roi';
+    const progress  = document.getElementById('optProgress');
+    const txt       = document.getElementById('optProgressText');
+    if (progress) progress.style.display = '';
+    if (txt) txt.textContent = '⏳ Оптимизация на сервере...';
+
+    const activeStrat = typeof backtestEngine !== 'undefined'
+      ? (backtestEngine.activeStrategies || []).find(s => s.enabled) : null;
+
+    if (!activeStrat) {
+      alert('Сначала добавьте стратегию в Движке бэктеста');
+      if (progress) progress.style.display = 'none';
+      return;
     }
-    
-    results.sort((a,b)=>parseFloat(b.roi)-parseFloat(a.roi));
-    bar.style.setProperty('--progress','100%');
-    txt.textContent = `Complete — ${results.length} combinations evaluated`;
-    setTimeout(() => { progress.style.display='none'; }, 1000);
-    
-    this.renderHeatmap(v1s, v2s, results, p1.name, p2.name, objective);
-    this.renderResultsTable(results.slice(0,50), p1.name, p2.name);
+
+    try {
+      const resp = await fetch('/api/bt/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategy: { name: activeStrat.name, sport: activeStrat.sport, code: activeStrat.code },
+          params: this.params,
+          cfg: { bankroll: 1000, dateFrom: '2020-01-01', dateTo: new Date().toISOString().slice(0,10) },
+          method, objective, maxIter: 300,
+        }),
+      });
+      const d = await resp.json();
+      if (d.error) throw new Error(d.error);
+      if (txt) txt.textContent = `✅ Готово: ${d.total} комбинаций`;
+      if (progress) setTimeout(() => { progress.style.display = 'none'; }, 2000);
+
+      // Обновляем таблицу результатов
+      const container = document.getElementById('optResultsTable');
+      if (container && d.results?.length) {
+        const cols = Object.keys(d.results[0]);
+        container.innerHTML = `<table class="data-table">
+          <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+          <tbody>${d.results.slice(0,50).map((r,i) =>
+            `<tr style="${i===0?'color:#00e676;font-weight:700':''}">${cols.map(c=>`<td>${r[c]}</td>`).join('')}</tr>`
+          ).join('')}</tbody></table>`;
+      }
+      if (d.best) {
+        let bestEl = document.getElementById('optBestResult');
+        if (!bestEl) {
+          bestEl = document.createElement('div');
+          bestEl.id = 'optBestResult';
+          if (container) container.parentNode.insertBefore(bestEl, container);
+        }
+        bestEl.innerHTML = `<div style="background:rgba(0,230,118,0.08);border:1px solid #00e67633;border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="color:var(--green);font-weight:700;margin-bottom:8px">🏆 Лучшая комбинация</div>
+          ${Object.entries(d.best).map(([k,v])=>
+            `<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text3)">${k}:</span><strong>${v}</strong></div>`
+          ).join('')}</div>`;
+      }
+    } catch(e) {
+      if (txt) txt.textContent = '❌ ' + e.message;
+      if (progress) setTimeout(() => { progress.style.display = 'none'; }, 3000);
+      console.error('[Optimizer]', e);
+    }
   },
   
   range(min, max, step) {

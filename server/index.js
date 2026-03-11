@@ -4,9 +4,11 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 const express = require('express');
+const btEngineRouter = require('./backtest_engine');
 const path    = require('path');
 const session = require('express-session');
 const vm      = require('vm');
+const btEngineRouter = require('./backtest_engine');
 
 const app = express();
 
@@ -91,6 +93,7 @@ try {
 app.locals.clickhouse = clickhouse;
 
 const { router: neuralRoutes, initNeuralPG } = require('./neural');
+app.use('/api/bt', requireAuth, btEngineRouter);
 app.use('/api/neural', neuralRoutes);
 if (pgPool) initNeuralPG(pgPool).catch(e => console.warn('[Neural PG]', e.message));
 else setTimeout(() => { if (pgPool) initNeuralPG(pgPool).catch(()=>{}); }, 3000);

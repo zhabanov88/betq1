@@ -394,54 +394,45 @@ const backtestEngine = {
     const enabled = this.activeStrategies.filter(s => s.enabled);
     if (!enabled.length) { alert('Включи хотя бы одну стратегию'); this.stopUI(); return; }
 
-    this.showProgress(10, 'Компиляция стратегий...');
-    const evalFns = enabled.map(s => ({ ...s, fn: this.compileStrategy(s.code) }));
-
-    this.showProgress(20, 'Загрузка данных из базы...');
-    let matchesBySport;
+    this.showProgress(10, 'Отправка на сервер...');
     try {
-      matchesBySport = await this.fetchMatchesFromServer(cfg, enabled);
-    } catch (err) {
-      this.stopUI();
-      this._showDataError(err.message);
-      return;
-    }
+      const resp = await fetch('/api/bt/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategies: enabled.map(s => ({ id: s.id, name: s.name, sport: s.sport, code: s.code, color: s.color })),
+          cfg,
+          parlayRules: this.parlayRules || [],
+        }),
+      });
+      this.showProgress(60, 'Получение результатов...');
+      const result = await resp.json();
 
-    const totalLoaded = Object.values(matchesBySport).reduce((s, arr) => s + arr.length, 0);
-    if (totalLoaded === 0) {
-      this.stopUI();
-      const sportNames = enabled.map(s => s.sport);
-      fetch('/api/backtest/sports')
-        .then(r => r.json())
-        .then(stats => {
+      if (result.error === 'no_data') {
+        this.stopUI();
+        fetch('/api/backtest/sports').then(r => r.json()).then(stats => {
           const available = Object.entries(stats)
             .filter(([, v]) => v.hasData)
             .map(([sp, v]) => `${v.label || sp}: ${v.count.toLocaleString()} матчей (${v.from}–${v.to})`);
-          const noData = sportNames.filter(sp => !stats[sp]?.hasData);
-          let msg = '';
-          if (noData.length) msg += `Нет данных для: <strong>${noData.join(', ')}</strong>. Запустите ETL.<br>`;
-          if (available.length) msg += `<br>Доступно в базе:<br>${available.map(a => `• ${a}`).join('<br>')}`;
+          const noData = enabled.map(s => s.sport).filter(sp => !stats[sp]?.hasData);
+          let msg = noData.length ? `Нет данных для: <strong>${noData.join(', ')}</strong>. Запустите ETL.<br>` : '';
+          if (available.length) msg += `<br>Доступно:<br>${available.map(a => '• ' + a).join('<br>')}`;
           this._showDataError(msg || 'Нет данных. Запустите ETL.');
-        })
-        .catch(() => {
-          this._showDataError('Нет данных в базе. Запустите ETL для загрузки исторических матчей.');
-        });
-      return;
+        }).catch(() => this._showDataError('Нет данных в базе.'));
+        return;
+      }
+      if (result.error) throw new Error(result.error);
+
+      this.showProgress(85, 'Отрисовка графиков...');
+      this.displayResults(result, enabled);
+      this.renderCharts(result);
+      this.showProgress(100, `Готово ✓ (${result.loaded || 0} матчей)`);
+      setTimeout(() => { const w = document.getElementById('btProgressWrap'); if (w) w.style.display = 'none'; }, 700);
+    } catch (e) {
+      this._showDataError('❌ Ошибка сервера: ' + e.message);
+    } finally {
+      this.stopUI();
     }
-
-    this.showProgress(40, `Загружено ${totalLoaded} матчей, прогон бэктеста...`);
-
-    const result = this.parlayRules.length
-      ? this.runParlayEngine(evalFns, matchesBySport, cfg)
-      : this.runSinglesEngine(evalFns, matchesBySport, cfg);
-
-    this.showProgress(85, 'Отрисовка графиков...');
-    this.displayResults(result, enabled);
-    this.renderCharts(result);
-
-    this.showProgress(100, `Готово ✓ (${totalLoaded} матчей из БД)`);
-    setTimeout(() => { const w = document.getElementById('btProgressWrap'); if(w) w.style.display='none'; }, 700);
-    this.stopUI();
   },
 
   async fetchMatchesFromServer(cfg, strategies) {
@@ -1048,7 +1039,7 @@ const backtestEngine = {
       'bts-pval':s.pval,'bts-avgodds':s.avgOdds,'bts-strike':s.strike,'bts-expected':s.zscore };
     for (const [id,val] of Object.entries(map)) {
       const el = document.getElementById(id); if(!el) continue;
-      el.textContent = val??'—';
+      el.textContent = val != null ? fmtVal(val) : '—';
       const v = parseFloat(val);
       if (['bts-roi','bts-profit','bts-yield','bts-sharpe','bts-clv'].includes(id))
         { el.classList.toggle('positive',v>0); el.classList.toggle('negative',v<=0); }
@@ -1058,6 +1049,80 @@ const backtestEngine = {
 
     this.renderStrategyBreakdown(result.stratStats, strategies);
     this.renderTradesTable(result.trades);
+
+    // ── Тултипы на лейблах метрик ──
+    const ttips = {
+      'bts-roi':     'ROI — прибыль / объём ставок × 100. >5% хорошо, >15% отлично',
+      'bts-profit':  'Абсолютная прибыль в единицах банкролла',
+      'bts-winrate': 'Win Rate — % выигрышных ставок. При odds=2 нужно >52%',
+      'bts-sharpe':  'Sharpe Ratio — доходность / риск. >1 хорошо, >2 отлично',
+      'bts-maxdd':   'Max Drawdown — макс. просадка от пика. <20% норма, >40% опасно',
+      'bts-clv':     'Closing Line Value — насколько коэффициенты лучше закрытия. >0 = edge',
+      'bts-pval':    'P-value — статистическая значимость. <0.05 = результат не случаен',
+      'bts-avgodds': 'Средний коэффициент. Влияет на дисперсию',
+      'bts-expected':'Z-Score — >2 значимо (p<0.05), >3 очень значимо',
+    };
+    for (const [id, tip] of Object.entries(ttips)) {
+      const lbl = document.querySelector(`[for="${id}"], .bt-stat-label[data-for="${id}"]`);
+      if (lbl && !lbl.querySelector('.tt-q')) {
+        const q = document.createElement('span');
+        q.className = 'tt-q';
+        q.title = tip;
+        q.textContent = '?';
+        q.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:rgba(255,255,255,0.1);color:#8892a4;font-size:9px;cursor:help;margin-left:3px;vertical-align:middle';
+        lbl.appendChild(q);
+      }
+    }
+    // ── Форматирование: не более 3 знаков ──
+    const fmtVal = (v) => {
+      const n = parseFloat(v);
+      if (isNaN(n)) return v;
+      if (Number.isInteger(n)) return String(n);
+      return n.toFixed(Math.min(3, (String(v).split('.')[1] || '').length));
+    };
+
+    // ── Резюме стратегии ──
+    const sr = result.stats;
+    if (sr) {
+      let verdict = '', emoji = '📊', color = '#8892a4';
+      const roi = parseFloat(sr.roi), sharpe = parseFloat(sr.sharpe),
+            pval = parseFloat(sr.pval), bets = parseInt(sr.bets),
+            maxdd = parseFloat(sr.maxDD || sr.maxdd || 0);
+      if (roi > 15 && sharpe > 1.5 && pval < 0.05) {
+        verdict = `ROI ${roi.toFixed(1)}% статистически значим (p=${pval.toFixed(3)}), Sharpe ${sharpe.toFixed(2)} — стабильная стратегия. Рекомендуется к применению.`;
+        emoji = '🏆'; color = '#00e676';
+      } else if (roi > 5 && pval < 0.1) {
+        verdict = `ROI ${roi.toFixed(1)}% перспективен, Sharpe ${sharpe.toFixed(2)}. Протестируй на новом периоде и оптимизируй параметры.`;
+        emoji = '✅'; color = '#ffd740';
+      } else if (roi > 0) {
+        verdict = `ROI ${roi.toFixed(1)}% положительный, но p=${pval.toFixed(3)} — статистически незначим (нужно 200+ ставок). Текущих: ${bets}.`;
+        emoji = '⚠️'; color = '#ff9800';
+      } else {
+        verdict = `Убыточная стратегия. ROI ${roi.toFixed(1)}%, просадка ${maxdd.toFixed(1)}%. Пересмотри условия входа.`;
+        emoji = '❌'; color = '#ff4560';
+      }
+      const warns = [
+        bets < 100 ? `⚠️ Малая выборка (${bets} ставок) — нужно 200+` : '',
+        maxdd > 40 ? `⚠️ Высокая просадка ${maxdd.toFixed(1)}%` : '',
+      ].filter(Boolean);
+
+      let sumEl = document.getElementById('btVerdictBlock');
+      if (!sumEl) {
+        sumEl = document.createElement('div');
+        sumEl.id = 'btVerdictBlock';
+        const bd = document.getElementById('btStratBreakdown');
+        if (bd) bd.parentNode.insertBefore(sumEl, bd);
+      }
+      sumEl.innerHTML = `
+        <div style="background:rgba(128,128,128,0.07);border:1px solid ${color}44;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700;color:${color};margin-bottom:6px">${emoji} Вердикт</div>
+          <div style="color:var(--text1);line-height:1.5;margin-bottom:${warns.length ? '8px' : '0'}">${verdict}</div>
+          ${warns.map(w => `<div style="color:var(--text2);font-size:12px;margin-top:4px">${w}</div>`).join('')}
+          <button onclick="app.showPanel('ai-strategy')" style="margin-top:10px;padding:5px 12px;border:none;border-radius:6px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:white;font-size:12px;font-weight:600;cursor:pointer">
+            🤖 Улучшить в AI стратегии
+          </button>
+        </div>`;
+    }
   },
 
   renderStrategyBreakdown(stratStats, strategies) {
