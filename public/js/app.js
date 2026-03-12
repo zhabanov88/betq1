@@ -144,6 +144,7 @@ showPanel(name) {
   if (name === 'bankroll'   && typeof bankrollManager  !== 'undefined') bankrollManager.init();
   if (name === 'telegram'   && typeof telegramSettings !== 'undefined') telegramSettings.init();
   if (name === 'llm-settings' && typeof llmSettings   !== 'undefined') llmSettings.init();
+  if (name === 'realtime' && typeof realtimePanel !== 'undefined') realtimePanel.init();
 },
   
   setSport(sport) {

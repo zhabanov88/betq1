@@ -91,6 +91,7 @@
             <button class="sidebar-btn" data-panel="telegram" onclick="app.showPanel('telegram')">
                 <span class="sidebar-icon">📱</span> Telegram
             </button>
+
         </div>
         <div class="sidebar-section">
             <div class="sidebar-label">БЭКТЕСТ</div>
@@ -110,6 +111,9 @@
             <button class="sidebar-btn" data-panel="database" onclick="app.showPanel('database')"><span class="sidebar-icon">🗄</span> База данных</button>
             <button class="sidebar-btn" data-panel="scraper" onclick="app.showPanel('scraper')"><span class="sidebar-icon">🕷</span> Сборщик данных</button>
             <button class="sidebar-btn" data-panel="odds-history" onclick="app.showPanel('odds-history')"><span class="sidebar-icon">📋</span> История коэффициентов</button>
+            <button class="sidebar-btn" data-panel="realtime" onclick="app.showPanel('realtime')">
+                <span class="sidebar-icon">📡</span> Realtime Monitor
+            </button>
         </div>
         <div class="sidebar-section">
             <div class="sidebar-label">ИНСТРУМЕНТЫ</div>
@@ -523,6 +527,57 @@
                 <div class="collection-log"><div class="config-title">Журнал сбора</div><div class="log-output" id="scraperLog"><div class="log-line info">[Система] Сборщик данных готов.</div></div></div>
             </div>
         </div>
+        <div class="panel" id="panel-realtime">
+            <div class="panel-header">
+              <h2>📡 Realtime Collector</h2>
+              <div class="panel-controls" id="rt-control-btns"></div>
+            </div>
+        
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        
+              <!-- Статус контейнера -->
+              <div class="stat-card">
+                <div class="stat-label">Docker контейнер</div>
+                <div id="rt-container-status" style="margin-top:8px"></div>
+                <div id="rt-action-msg" style="font-size:12px;margin-top:8px;min-height:18px"></div>
+              </div>
+        
+              <!-- The Odds API -->
+              <div class="stat-card">
+                <div class="stat-label">The Odds API — расход</div>
+                <div id="rt-odds-usage" style="margin-top:8px"></div>
+              </div>
+        
+            </div>
+        
+            <!-- Таблицы данных -->
+            <div class="stat-card" style="margin-bottom:16px">
+              <div class="stat-label" style="margin-bottom:12px">Состояние таблиц</div>
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr style="color:var(--text3);font-size:11px;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 0">Таблица</th>
+                    <th style="text-align:right;padding:4px 8px">Строк</th>
+                    <th style="padding:4px 8px">Последнее</th>
+                    <th style="padding:4px 8px">Частота</th>
+                  </tr>
+                </thead>
+                <tbody id="rt-tables-body"></tbody>
+              </table>
+            </div>
+        
+            <!-- Логи -->
+            <div id="rt-logs-wrap" style="display:none">
+              <div class="stat-card">
+                <div class="stat-label">Логи контейнера (обновляются каждые 10с)</div>
+                <div id="rt-logs-output"
+                     style="margin-top:10px;max-height:400px;overflow-y:auto;
+                            font-family:var(--font-mono);font-size:11px;
+                            background:var(--bg);border-radius:4px;padding:10px">
+                </div>
+              </div>
+            </div>
+          </div>
         <!-- STATS -->
         <div class="panel" id="panel-stats">
             <div class="panel-header"><h2>📊 Статистика</h2></div>
@@ -996,6 +1051,8 @@
 <script src="js/telegram-settings.js"></script>
 
 <script src="js/panel-fix.js"></script>
+
+<script src="/js/realtime-panel.js"></script>
 
 </body>
 </html>

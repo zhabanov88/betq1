@@ -10,6 +10,7 @@ RUN npm install --omit=dev
 
 COPY server/  ./server/
 COPY public/  ./public/
+COPY data-collectors/ ./data-collectors/
 
 # Копируем ETL скрипты (запускаются через /api/etl/run)
 COPY betquant-etl/   ./betquant-etl/

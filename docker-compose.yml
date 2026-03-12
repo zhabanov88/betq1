@@ -106,7 +106,7 @@ services:
     image: dbeaver/cloudbeaver:latest
     container_name: betquant-cloudbeaver
     ports:
-      - "28978:8978"
+      - "28078:8978"
     volumes:
       - cloudbeaver-data:/opt/cloudbeaver/workspace
     depends_on:
@@ -187,7 +187,25 @@ services:
       - app
     restart: unless-stopped
     networks: [bq]
-
+# ───────── Realtime Collector ─────────
+  realtime:
+    build: .                              # тот же Dockerfile что и app
+    container_name: betquant-realtime
+    command: node data-collectors/realtime-collector.js
+    env_file: .env
+    environment:
+      - CH_HOST=http://clickhouse:8123
+      - CH_USER=default
+      - CH_PASSWORD=
+      - CH_DATABASE=betquant
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped              # ← автоперезапуск при docker compose up
+    networks: [bq]
+    labels:
+      - "com.betquant.service=realtime-collector"
+      - "com.betquant.description=BSD + Odds API data collector"
 volumes:
   pg-data:
   ch-data:

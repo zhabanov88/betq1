@@ -1067,3 +1067,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #btClickTooltip {
   animation: fadeIn 0.15s ease;
 }
+
+.rt-status-row { display:flex;justify-content:space-between;align-items:center;padding:4px 0; }
+   .rt-label { font-size:12px;color:var(--text3); }
+   .rt-val { font-size:13px;font-weight:500; }
+   .rt-meta { font-size:11px;color:var(--text3);font-family:var(--font-mono); }
+   #rt-logs-output .log-ok   { color:var(--green,#4caf50); }
+   #rt-logs-output .log-err  { color:var(--red,#f44336); }
+   #rt-logs-output .log-warn { color:#ff9800; }
+   #rt-logs-output .log-info { color:var(--text2); }
