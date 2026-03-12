@@ -1037,3 +1037,33 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   overflow-y: auto;
   max-height: calc(100vh - 120px);
 }
+
+/* ── Fullscreen overlay ────────────────────────────────────────── */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+#btFsOverlay canvas {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+}
+
+/* ── Подсветка строки в таблице при клике ──────────────────────── */
+#btTradesTable tbody tr.bt-row-highlighted {
+  background: rgba(0, 212, 255, 0.12) !important;
+  outline: 1px solid rgba(0, 212, 255, 0.4);
+}
+
+/* ── Кнопка fullscreen на графике ─────────────────────────────── */
+.btn-chart-fs {
+  opacity: 0.4;
+  font-size: 13px !important;
+  padding: 1px 7px !important;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.chart-card:hover .btn-chart-fs { opacity: 1; }
+
+/* ── Тултип при клике на equity ────────────────────────────────── */
+#btClickTooltip {
+  animation: fadeIn 0.15s ease;
+}

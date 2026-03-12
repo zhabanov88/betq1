@@ -51,24 +51,26 @@ services:
     networks: [bq]
 
   # ───────── ClickHouse ─────────
-  # clickhouse/clickhouse-server выполняет *.sql и *.sh из /docker-entrypoint-initdb.d/
-  # автоматически при первом старте (когда том ch-data пустой).
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
     container_name: betquant-ch
     environment:
-      CLICKHOUSE_DB:                    ${CH_DATABASE:-betquant}
-      CLICKHOUSE_USER:                  ${CH_USER:-default}
+      CLICKHOUSE_DB:                        ${CH_DATABASE:-betquant}
+      CLICKHOUSE_USER:                      ${CH_USER:-default}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
       - ch-data:/var/lib/clickhouse
       - ch-logs:/var/log/clickhouse-server
-      # Схема применяется автоматически при первом старте (когда том пустой)
       - ./init-scripts/02_init_clickhouse.sql:/docker-entrypoint-initdb.d/02_legacy.sql
       - ./init-scripts/02_init_clickhouse_extended.sql:/docker-entrypoint-initdb.d/03_extended.sql
+      # Конфиг: разрешаем multistatement через HTTP и доступ с любого IP
+      - ./clickhouse-config/users.xml:/etc/clickhouse-server/users.d/custom-users.xml:ro
+      - ./clickhouse-config/config.xml:/etc/clickhouse-server/config.d/custom-config.xml:ro
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "8123:8123"   # HTTP API (используется приложением и ETL)
+      - "8132:8123"   # дублируем HTTP на 8132 для прямого доступа браузера
+      - "9000:9000"   # Native TCP (clickhouse-client)
+      - "9009:9009"   # Interserver (репликация, опционально)
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
     healthcheck:
@@ -79,14 +81,43 @@ services:
     restart: unless-stopped
     networks: [bq]
 
-  # ───────── ETL v1 — Data Collector (Football, Hockey, Tennis, NBA, MLB) ─────────
-  # Загружает реальные исторические данные из открытых источников в ClickHouse.
-  #
-  # Запуск вручную:
-  #   docker compose --profile etl run --rm etl
-  #   docker compose --profile etl run --rm etl python3 run_etl.py --quick --seasons 1
-  #
-  # Или через UI: панель "Data Collector" → кнопка "▶ Запустить ETL"
+  # ───────── ClickHouse UI (tabix) — лёгкий веб-интерфейс ─────────
+  # Доступ: http://SERVER_IP:28124
+  # Подключение внутри: host=clickhouse, port=8123, user=default, pass=<пусто>
+  clickhouse-ui:
+    image: spoonest/clickhouse-tabix-web-client:stable
+    container_name: betquant-ch-ui
+    environment:
+      - CSP_CLICKHOUSE_HOST=http://clickhouse:8123
+      - CSP_CLICKHOUSE_USER=default
+      - CSP_CLICKHOUSE_PASSWORD=
+    ports:
+      - "28124:80"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [bq]
+
+  # ───────── CloudBeaver — полный DBeaver веб (PostgreSQL + ClickHouse) ─────────
+  # Доступ: http://SERVER_IP:28978
+  # ВАЖНО: теперь в сети bq — видит clickhouse и postgres по имени сервиса
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: betquant-cloudbeaver
+    ports:
+      - "28978:8978"
+    volumes:
+      - cloudbeaver-data:/opt/cloudbeaver/workspace
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [bq]    # ← ИСПРАВЛЕНО: было shared-network, теперь bq
+
+  # ───────── ETL v1 ─────────
   etl:
     build:
       context: .
@@ -109,12 +140,7 @@ services:
     profiles: ["etl"]
     networks: [bq]
 
-  # ───────── ETL v2 — Extended Sports (Basketball, Cricket, Rugby, NFL, Waterpolo, Volleyball) ─────
-  # Загружает расширенные данные по 6 видам спорта с детальной статистикой.
-  #
-  # Запуск вручную:
-  #   docker compose --profile etl-v2 run --rm etl-v2
-  #   docker compose --profile etl-v2 run --rm etl-v2 python3 run_etl_v2.py --sport cricket --quick --seasons 1
+  # ───────── ETL v2 ─────────
   etl-v2:
     build:
       context: .
@@ -161,19 +187,6 @@ services:
       - app
     restart: unless-stopped
     networks: [bq]
-
-  dbeaver:
-    image: dbeaver/cloudbeaver:latest
-    container_name: cloudbeaver
-    depends_on:
-      - greenplum-db
-    networks:
-      - shared-network 
-    ports:
-      - "28978:8978"
-    volumes:
-      - cloudbeaver-data:/opt/cloudbeaver/workspace
-    restart: unless-stopped
 
 volumes:
   pg-data:

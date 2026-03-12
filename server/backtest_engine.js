@@ -157,58 +157,66 @@ function compileStrategy(code) {
 }
 
 function calcStats(trades, startBank, equity) {
-  if (!trades.length) return { bets: 0 };
-  const wins     = trades.filter(t => t.won === 'W').length;
-  const totalPnL = trades.reduce((s, t) => s + parseFloat(t.pnl), 0);
-  const totalStk = trades.reduce((s, t) => s + parseFloat(t.stake), 0);
-  const roi      = totalStk ? (totalPnL / totalStk) * 100 : 0;
-  const winRate  = wins / trades.length * 100;
-  const avgOdds  = trades.reduce((s, t) => s + (t.odds || 0), 0) / trades.length;
-
-  let peak = startBank, maxDD = 0;
-  equity.forEach(v => {
-    if (v > peak) peak = v;
-    const dd = peak > 0 ? (peak - v) / peak * 100 : 0;
-    if (dd > maxDD) maxDD = dd;
-  });
-
-  const rets  = trades.map(t => parseFloat(t.pnl) / Math.max(0.01, parseFloat(t.stake)));
-  const avgR  = rets.reduce((s, r) => s + r, 0) / rets.length;
-  const stdR  = Math.sqrt(rets.reduce((s, r) => s + (r - avgR) ** 2, 0) / rets.length);
-  const sharpe = stdR > 0 ? +(avgR / stdR * Math.sqrt(252)).toFixed(3) : 0;
-
-  // P-value (simplified z-test)
-  // Z-score и p-value
-  const z = (stdR > 0 && n > 1) ? +(avgR / (stdR / Math.sqrt(n))).toFixed(3) : 0;
-  const absZ = Math.abs(z);
-  // Приближение нормального распределения
-  const pValue = absZ > 0
-    ? +Math.max(0, 2 * (1 - (0.5 * (1 + Math.sign(absZ) * (1 - Math.exp(-0.7 * absZ * absZ))))).toFixed(4))
-    : 1;
-  // Monthly PnL
-  const monthly = {};
-  trades.forEach(t => {
-    const ym = String(t.date || '').slice(0, 7);
-    if (!monthly[ym]) monthly[ym] = 0;
-    monthly[ym] += parseFloat(t.pnl);
-  });
-
-  // Avg CLV (placeholder — real CLV needs closing odds)
-  const avgCLV = roi * 0.3;
-
-  // Текстовое резюме
-  const summary = buildSummary({ roi, winRate, sharpe, maxDD, bets: trades.length, avgOdds, pValue, totalPnL, startBank });
-
-  return {
-    bets: trades.length, wins, roi: +roi.toFixed(3), profit: +totalPnL.toFixed(3),
-    winRate: +winRate.toFixed(3), sharpe, maxDD: +maxDD.toFixed(3),
-    avgOdds: +avgOdds.toFixed(3), avgCLV: +avgCLV.toFixed(3),
-    pValue: +pValue.toFixed(3), zScore: +z.toFixed(3),
-    strike: +winRate.toFixed(3),
-    monthly, equity,
-    summary,
-  };
-}
+    if (!trades.length) return { bets: 0 };
+  
+    const n       = trades.length;
+    const wins    = trades.filter(t => t.won === 'W').length;
+    const totalPnL = trades.reduce((s, t) => s + parseFloat(t.pnl), 0);
+    const totalStk = trades.reduce((s, t) => s + parseFloat(t.stake), 0);
+    const roi     = totalStk ? (totalPnL / totalStk) * 100 : 0;
+    const winRate = wins / n * 100;
+    const avgOdds = trades.reduce((s, t) => s + (t.odds || 0), 0) / n;
+  
+    // Max drawdown
+    let peak = startBank, maxDD = 0;
+    equity.forEach(v => {
+      if (v > peak) peak = v;
+      const dd = peak > 0 ? (peak - v) / peak * 100 : 0;
+      if (dd > maxDD) maxDD = dd;
+    });
+  
+    // Sharpe
+    const rets = trades.map(t => parseFloat(t.pnl) / Math.max(0.01, parseFloat(t.stake)));
+    const avgR = rets.reduce((s, r) => s + r, 0) / n;
+    const stdR = Math.sqrt(rets.reduce((s, r) => s + (r - avgR) ** 2, 0) / n);
+    const sharpe = (stdR > 0 && isFinite(stdR)) ? +(avgR / stdR * Math.sqrt(252)).toFixed(3) : 0;
+  
+    // Z-score и P-value
+    const z = (stdR > 0 && n > 1) ? +(avgR / (stdR / Math.sqrt(n))).toFixed(3) : 0;
+    const absZ = Math.abs(z);
+    const pValue = (absZ > 0 && isFinite(absZ))
+      ? +Math.max(0, 2 * (1 - 0.5 * (1 + Math.sign(absZ) *
+          (1 - Math.exp(-0.7 * absZ * absZ))))).toFixed(4)
+      : 1;
+  
+    // Monthly PnL
+    const monthly = {};
+    trades.forEach(t => {
+      const ym = String(t.date || '').slice(0, 7);
+      if (ym) monthly[ym] = (monthly[ym] || 0) + parseFloat(t.pnl);
+    });
+  
+    const avgCLV = roi * 0.3;
+    const summary = buildSummary({ roi, winRate, sharpe, maxDD, bets: n, avgOdds, pValue, totalPnL, startBank });
+  
+    return {
+      bets: n, wins,
+      roi:     +roi.toFixed(3),
+      profit:  +totalPnL.toFixed(3),
+      winRate: +winRate.toFixed(3),
+      sharpe,
+      maxDD:   +maxDD.toFixed(3),
+      avgOdds: +avgOdds.toFixed(3),
+      avgCLV:  +avgCLV.toFixed(3),
+      pValue,
+      zScore:  isFinite(z) ? z : 0,
+      strike:  +winRate.toFixed(3),
+      pval:    pValue,
+      zscore:  isFinite(z) ? z : 0,
+      monthly, equity,
+      summary,
+    };
+  }
 
 function buildSummary({ roi, winRate, sharpe, maxDD, bets, avgOdds, pValue, totalPnL, startBank }) {
   const profitPct = ((totalPnL / startBank) * 100).toFixed(1);
@@ -249,11 +257,11 @@ function buildSummary({ roi, winRate, sharpe, maxDD, bets, avgOdds, pValue, tota
 const SPORT_CFG = {
   football:   { table: 'betquant.football_matches',    leagueCol: 'league_code', seasonCol: 'season' },
   hockey:     { table: 'betquant.hockey_matches',      leagueCol: 'league',      seasonCol: 'season' },
-  basketball: { table: 'betquant.basketball_matches_v2', leagueCol: 'league',    seasonCol: 'season', fallback: 'betquant.basketball_matches' },
+  basketball: { table: 'betquant.basketball_matches', leagueCol: 'league',    seasonCol: 'season', fallback: 'betquant.basketball_matches' },
   baseball:   { table: 'betquant.baseball_matches',    leagueCol: 'league',      seasonCol: 'season' },
-  tennis:     { table: 'betquant.tennis_extended',     leagueCol: 'tour',        seasonCol: null },
+  tennis:     { table: 'betquant.tennis_matches',     leagueCol: 'tour',        seasonCol: null },
   volleyball: { table: 'betquant.volleyball_matches',  leagueCol: 'competition', seasonCol: 'season' },
-  nfl:        { table: 'betquant.nfl_matches',         leagueCol: 'league',      seasonCol: 'season' },
+  nfl:        { table: 'betquant.nfl_games',         leagueCol: 'league',      seasonCol: 'season' },
   rugby:      { table: 'betquant.rugby_matches',       leagueCol: 'competition', seasonCol: 'season' },
   cricket:    { table: 'betquant.cricket_matches',     leagueCol: 'competition', seasonCol: 'season' },
   waterpolo:  { table: 'betquant.waterpolo_matches',   leagueCol: 'competition', seasonCol: 'season' },
@@ -659,85 +667,122 @@ router.post('/optimize', async (req, res) => {
 //  POST /api/bt/walkforward  — walk-forward на реальных данных
 // ═══════════════════════════════════════════════════════════════════
 router.post('/walkforward', async (req, res) => {
-  const { strategy, cfg = {}, wfCfg = {} } = req.body;
-  const clickhouse = req.app.locals.clickhouse;
-
-  if (!strategy || !clickhouse) return res.status(400).json({ error: 'strategy + clickhouse required' });
-
-  try {
-    const allMatches = await loadMatches(clickhouse, strategy.sport || 'football', {
-      dateFrom: cfg.dateFrom || '2019-01-01',
-      dateTo:   cfg.dateTo   || new Date().toISOString().slice(0, 10),
-    });
-    if (allMatches.length < 50) return res.json({ error: 'not_enough_data', windows: [] });
-
-    allMatches.sort((a, b) => a.date.localeCompare(b.date));
-    const fn = compileStrategy(strategy.code);
-    if (!fn) return res.status(400).json({ error: 'compile_error' });
-
-    const numWindows = Math.max(3, Math.min(20, parseInt(wfCfg.windowSize) || 6));
-    const inSample   = parseFloat(wfCfg.inSample) / 100 || 0.7;
-    const anchored   = !!wfCfg.anchored;
-    const n = allMatches.length;
-    const winSize = Math.floor(n / numWindows);
-
-    const windows = [];
-    for (let i = 0; i < numWindows; i++) {
-      const blockStart = anchored ? 0 : i * winSize;
-      const blockEnd   = Math.min((i + 1) * winSize, n);
-      const splitAt    = blockStart + Math.floor((blockEnd - blockStart) * inSample);
-
-      const trainSet = allMatches.slice(blockStart, splitAt);
-      const testSet  = allMatches.slice(splitAt, blockEnd);
-      if (testSet.length < 5) continue;
-
-      // Train: eval strategy on train set (for context only, no result used)
-      // Test: run backtest on test set
-      let bank = cfg.bankroll || 1000;
-      const tradesLocal = [];
-      for (const m of testSet) {
-        let sig = null;
-        try { sig = fn(m, makeTeamAPI(m, trainSet.concat(testSet)), makeH2H(m, allMatches), makeMarketAPI()); } catch (e) {}
-        if (!sig?.signal) continue;
-        const mk = String(sig.market || 'home').toLowerCase().replace('_win', '');
-        const odds = m[`odds_${mk}`] || m.odds_home;
-        if (!odds || odds < 1.05) continue;
-        const stake = calcStake(cfg, bank, odds, sig.prob || 0.5);
-        const won = checkWin(m, sig.market);
-        const pnl = won ? stake * (odds - 1) : -stake;
-        bank = Math.max(0, bank + pnl);
-        tradesLocal.push({ stake, pnl, odds, won: won ? 'W' : 'L', date: m.date });
-      }
-
-      const bets = tradesLocal.length;
-      const wins = tradesLocal.filter(t => t.won === 'W').length;
-      const totPnL = tradesLocal.reduce((s, t) => s + t.pnl, 0);
-      const totStk = tradesLocal.reduce((s, t) => s + t.stake, 0);
-      const roi = totStk ? (totPnL / totStk) * 100 : 0;
-      const wr = bets ? wins / bets * 100 : 0;
-      const avgOdds = bets ? tradesLocal.reduce((s, t) => s + t.odds, 0) / bets : 0;
-
-      windows.push({
-        window: i + 1,
-        trainDates: `${trainSet[0]?.date || '?'} — ${trainSet[trainSet.length-1]?.date || '?'}`,
-        testDates:  `${testSet[0]?.date  || '?'} — ${testSet[testSet.length-1]?.date  || '?'}`,
-        trainSize: trainSet.length,
-        testBets: bets, wins,
-        winRate: +wr.toFixed(1),
-        avgOdds: +avgOdds.toFixed(2),
-        roi: +roi.toFixed(1),
-        pnl: +totPnL.toFixed(2),
-        stable: Math.abs(roi) < 40 && wr > 35,
+    const { strategy, cfg = {}, wfCfg = {} } = req.body;
+    const clickhouse = req.app.locals.clickhouse;
+  
+    if (!strategy || !clickhouse) return res.status(400).json({ error: 'strategy + clickhouse required' });
+  
+    try {
+      const allMatches = await loadMatches(clickhouse, strategy.sport || 'football', {
+        dateFrom: cfg.dateFrom || '2019-01-01',
+        dateTo:   cfg.dateTo   || new Date().toISOString().slice(0, 10),
       });
+  
+      console.log(`[wf] loaded ${allMatches.length} matches for ${strategy.sport}, strategy: ${strategy.name}`);
+  
+      if (allMatches.length < 50) {
+        return res.json({ error: 'not_enough_data', windows: [], debug: { loaded: allMatches.length } });
+      }
+  
+      allMatches.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  
+      const fn = compileStrategy(strategy.code);
+      if (!fn) {
+        console.error('[wf] compile_error for strategy:', strategy.name);
+        return res.status(400).json({ error: 'compile_error' });
+      }
+  
+      const numWindows = Math.max(3, Math.min(20, parseInt(wfCfg.windowSize) || parseInt(wfCfg.windows) || 5));
+      const inSample   = (parseFloat(wfCfg.inSample) || 70) / 100;
+      const anchored   = !!wfCfg.anchored;
+      const n = allMatches.length;
+      const winSize = Math.floor(n / numWindows);
+  
+      // Глобальный индекс для H2H по всем матчам
+      const globalIdx = buildIndexes(allMatches);
+  
+      const windows = [];
+      for (let i = 0; i < numWindows; i++) {
+        const blockStart = anchored ? 0 : i * winSize;
+        const blockEnd   = Math.min((i + 1) * winSize, n);
+        const splitAt    = blockStart + Math.floor((blockEnd - blockStart) * inSample);
+  
+        const trainSet = allMatches.slice(blockStart, splitAt);
+        const testSet  = allMatches.slice(splitAt, blockEnd);
+  
+        if (testSet.length < 5) {
+          console.log(`[wf] window ${i+1}: testSet too small (${testSet.length}), skipping`);
+          continue;
+        }
+  
+        // FIX: строим индекс из train+test для makeTeamAPI (нужны исторические данные)
+        const contextIdx = buildIndexes(trainSet.concat(testSet));
+  
+        let bank = cfg.bankroll || 1000;
+        const tradesLocal = [];
+        let errCount = 0;
+  
+        for (const m of testSet) {
+          let sig = null;
+          try {
+            sig = fn(m, makeTeamAPI(m, contextIdx), makeH2H(m, globalIdx), makeMarketAPI());
+          } catch (e) {
+            errCount++;
+            if (errCount <= 3) console.error(`[wf] strategy eval error: ${e.message}`);
+          }
+          if (!sig?.signal) continue;
+          const mk = String(sig.market || 'home').toLowerCase().replace('_win', '');
+          const odds = m[`odds_${mk}`] || m.odds_home;
+          if (!odds || odds < 1.05) continue;
+          const stake = calcStake(cfg, bank, odds, sig.prob || 0.5);
+          const won = checkWin(m, sig.market);
+          const pnl = won ? stake * (odds - 1) : -stake;
+          bank = Math.max(0, bank + pnl);
+          tradesLocal.push({ stake, pnl, odds, won: won ? 'W' : 'L', date: m.date });
+        }
+  
+        const bets     = tradesLocal.length;
+        const wins     = tradesLocal.filter(t => t.won === 'W').length;
+        const totPnL   = tradesLocal.reduce((s, t) => s + t.pnl, 0);
+        const totStk   = tradesLocal.reduce((s, t) => s + t.stake, 0);
+        const roi      = totStk ? (totPnL / totStk) * 100 : 0;
+        const wr       = bets ? wins / bets * 100 : 0;
+        const avgOdds  = bets ? tradesLocal.reduce((s, t) => s + t.odds, 0) / bets : 0;
+  
+        console.log(`[wf] window ${i+1}: trainSize=${trainSet.length}, testSize=${testSet.length}, bets=${bets}, errors=${errCount}, roi=${roi.toFixed(1)}%`);
+  
+        windows.push({
+          window:     i + 1,
+          trainDates: `${trainSet[0]?.date || '?'} — ${trainSet[trainSet.length-1]?.date || '?'}`,
+          testDates:  `${testSet[0]?.date  || '?'} — ${testSet[testSet.length-1]?.date  || '?'}`,
+          trainSize:  trainSet.length,
+          testSize:   testSet.length,
+          testBets:   bets,
+          wins,
+          winRate:    +wr.toFixed(1),
+          avgOdds:    +avgOdds.toFixed(2),
+          roi:        +roi.toFixed(1),
+          pnl:        +totPnL.toFixed(2),
+          stable:     Math.abs(roi) < 40 && wr > 35 && bets >= 10,
+        });
+      }
+  
+      const profitable = windows.filter(w => w.pnl > 0).length;
+      const avgROI     = windows.length ? windows.reduce((s, w) => s + w.roi, 0) / windows.length : 0;
+  
+      res.json({
+        windows,
+        summary: {
+          profitable,
+          total:   windows.length,
+          avgROI:  +avgROI.toFixed(2),
+          loaded:  allMatches.length,
+        },
+      });
+    } catch (e) {
+      console.error('[bt/walkforward]', e);
+      res.status(500).json({ error: e.message });
     }
-
-    const profitable = windows.filter(w => w.pnl > 0).length;
-    const avgROI = windows.reduce((s, w) => s + w.roi, 0) / (windows.length || 1);
-    res.json({ windows, summary: { profitable, total: windows.length, avgROI: +avgROI.toFixed(2) } });
-  } catch (e) {
-    console.error('[bt/walkforward]', e);
-    res.status(500).json({ error: e.message });
-  }
-});
+  });
 
 module.exports = router;

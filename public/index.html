@@ -340,25 +340,47 @@
             <div class="mc-layout">
                 <div class="mc-config">
                     <div class="config-section">
-                        <div class="config-title">Параметры</div>
-                        <div class="config-row"><label>Симуляции</label><input type="number" class="ctrl-input" id="mcSimCount" value="10000"></div>
-                        <div class="config-row"><label>Ставок за серию</label><input type="number" class="ctrl-input" id="mcBetsPerRun" value="500"></div>
-                        <div class="config-row"><label>Начальный банкролл</label><input type="number" class="ctrl-input" id="mcBankroll" value="1000"></div>
-                        <div class="config-row"><label>Процент побед %</label><input type="number" class="ctrl-input" id="mcWinRate" value="52" step="0.5"></div>
-                        <div class="config-row"><label>Средний коэф.</label><input type="number" class="ctrl-input" id="mcAvgOdds" value="2.0" step="0.05"></div>
-                        <div class="config-row"><label>Размер ставки %</label><input type="number" class="ctrl-input" id="mcStake" value="2" step="0.5"></div>
-                        <div class="config-row"><label>Порог краха %</label><input type="number" class="ctrl-input" id="mcRuinThreshold" value="10"></div>
+                        <div class="config-title">Параметры симуляции</div>
+                        <div class="config-row">
+                            <label title="Количество независимых симуляций. Больше = точнее результат, но медленнее. Рекомендуется 5000–10000.">Симуляции ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcSimCount" value="10000">
+                        </div>
+                        <div class="config-row">
+                            <label title="Сколько ставок в каждой симуляции. Соответствует планируемому числу ставок за сезон/год.">Ставок за серию ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcBetsPerRun" value="500">
+                        </div>
+                        <div class="config-row">
+                            <label title="Начальная сумма банкролла для каждой симуляции.">Начальный банкролл ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcBankroll" value="1000">
+                        </div>
+                        <div class="config-row">
+                            <label title="Процент выигрышных ставок. При коэф. 2.0 нужно >50% для прибыли. Если есть активная стратегия — берётся автоматически из бэктеста.">Win Rate % ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcWinRate" value="52" step="0.5">
+                        </div>
+                        <div class="config-row">
+                            <label title="Средний коэффициент ставок. Влияет на математическое ожидание: edge = WR × (odds−1) − (1−WR).">Средний коэф. ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcAvgOdds" value="2.0" step="0.05">
+                        </div>
+                        <div class="config-row">
+                            <label title="Размер каждой ставки в % от текущего банкролла (Kelly-style flat %). 1-3% — консервативно, 5%+ — агрессивно.">Размер ставки % ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcStake" value="2" step="0.5">
+                        </div>
+                        <div class="config-row">
+                            <label title="Порог краха: симуляция считается 'рухнувшей', если банкролл упал ниже этого % от начального.">Порог краха % ℹ</label>
+                            <input type="number" class="ctrl-input" id="mcRuinThreshold" value="10">
+                        </div>
                     </div>
+                    <div id="mcStrategyCard"></div>
                     <div class="mc-summary" id="mcSummary"></div>
                 </div>
                 <div class="mc-charts">
-                    <div class="chart-card large"><div class="chart-card-header"><span>Кривые капитала (500 симуляций)</span></div><canvas id="chartMCPaths" height="280"></canvas></div>
+                    <div class="chart-card large"><div class="chart-card-header"><span>Кривые капитала (500 симуляций)</span><span style="font-size:10px;color:var(--text3);margin-left:8px">P5/P95 = худшие и лучшие 5% исходов</span></div><canvas id="chartMCPaths" height="280"></canvas></div>
                     <div class="chart-grid-2col">
-                        <div class="chart-card"><div class="chart-card-header"><span>Распределение итогового банкролла</span></div><canvas id="chartMCDistrib" height="200"></canvas></div>
-                        <div class="chart-card"><div class="chart-card-header"><span>Кривая вероятности краха</span></div><canvas id="chartMCRuin" height="200"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header"><span>Распределение итогового банкролла</span><span style="font-size:10px;color:var(--text3);margin-left:4px">Красный = убыток, синий = прибыль</span></div><canvas id="chartMCHist" height="200"></canvas></div>
+                        <div class="chart-card"><div class="chart-card-header"><span>Кривая вероятности краха</span><span style="font-size:10px;color:var(--text3);margin-left:4px">Накопленный % разорений по ставкам</span></div><canvas id="chartMCRuin" height="200"></canvas></div>
                     </div>
                 </div>
-            </div>
+            </div> 
         </div>
         <!-- OPTIMIZER -->
         <div class="panel" id="panel-optimizer">
@@ -558,18 +580,40 @@
         </div>
         <!-- WALK FORWARD -->
         <div class="panel" id="panel-walkforward">
-            <div class="panel-header"><h2>🔄 Walk-Forward анализ</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="walkForward.run()">▶ Запустить</button></div></div>
+            <div class="panel-header"><h2>🔄 Walk-Forward анализ</h2><div class="panel-controls"><button class="ctrl-btn primary" onclick="walkForward.run()">▶ Run</button></div></div>
             <div class="wf-layout">
                 <div class="wf-config">
-                    <div class="config-section"><div class="config-title">Настройки</div>
-                        <div class="config-row"><label>Обучающая выборка %</label><input type="number" class="ctrl-input" id="wfInSample" value="70"></div>
-                        <div class="config-row"><label>Окна</label><input type="number" class="ctrl-input" id="wfWindows" value="5"></div>
-                        <div class="config-row"><label>Закреплённое</label><label class="toggle-switch"><input type="checkbox" id="wfAnchored"><span class="toggle-slider"></span></label></div>
+                    <div class="config-section">
+                        <div class="config-title">Настройки</div>
+                        <div class="config-row">
+                            <label title="Доля исторических данных для обучения стратегии. Остаток идёт на тест (out-of-sample).">Обучающая выборка % ℹ</label>
+                            <input type="number" class="ctrl-input" id="wfInSample" value="70">
+                        </div>
+                        <div class="config-row">
+                            <label title="На сколько временных окон разбить данные. Больше окон = более детальная проверка, но меньше данных в каждом окне.">Окна ℹ</label>
+                            <input type="number" class="ctrl-input" id="wfWindows" value="5">
+                        </div>
+                        <div class="config-row">
+                            <label title="Закреплённое окно: train всегда начинается с самого начала, расширяясь. Скользящее: каждое окно независимо.">Закреплённое ℹ</label>
+                            <label class="toggle-switch"><input type="checkbox" id="wfAnchored"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div class="config-row">
+                            <label>Начальный банкролл</label>
+                            <input type="number" class="ctrl-input" id="wfBankroll" value="1000">
+                        </div>
+                        <div class="config-row">
+                            <label>Начальный банкролл</label>
+                            <input type="number" class="ctrl-input" id="wfBankroll" value="1000">
+                        </div>
                     </div>
+                    <div id="wfStratInfo" style="padding:0 4px"></div>
+                    <div id="wfSummary" class="mc-summary" style="margin-top:8px"></div>
                 </div>
                 <div class="wf-results">
-                    <div class="chart-card large"><div class="chart-card-header"><span>Окна Walk-Forward</span></div><canvas id="chartWFWindows" height="280"></canvas></div>
-                    <div id="wfResultsTable" class="data-table-container"></div>
+                    <div class="chart-card large"><div class="chart-card-header"><span>ROI по окнам Walk-Forward</span><span style="font-size:10px;color:var(--text3);margin-left:8px">Зелёный = прибыль, красный = убыток в тестовом периоде</span></div><canvas id="chartWFWindows" height="280"></canvas></div>
+                    <div id="wfResultsTable" class="data-table-container" style="margin-top:12px"></div>
+                    <div id="wfStratInfo" style="padding:0 4px"></div>
+                    <div id="wfSummary" class="mc-summary" style="margin-top:8px;font-size:12px"></div>
                 </div>
             </div>
         </div>
@@ -712,23 +756,9 @@
         </div>
 
         <!-- NEURAL NETWORKS -->
+        <!-- NEURAL NETWORKS -->
         <div class="panel" id="panel-neural">
-            <div class="nn-header">
-            <div>
-                <div class="nn-header-title">🧠 Нейросетевой анализ</div>
-                <div class="nn-header-sub">Автообучаемые модели · Веса с объяснениями · Нестандартные стратегии</div>
-            </div>
-            <div class="nn-header-actions">
-                <button class="nn-btn green" onclick="neuralPanel.trainSport('all')">▶ Обучить все</button>
-                <button class="nn-btn" onclick="neuralPanel.loadStatus().then(()=>neuralPanel.renderStatus())">🔄 Обновить</button>
-            </div>
-            </div>
-            <div id="nn-status-grid"></div>
-            <div id="nn-sport-tabs"></div>
-            <div class="nn-content">
-            <div id="nn-weights-panel"><div class="nn-empty">Выбери вид спорта и обучи модель</div></div>
-            <div id="nn-strategies-panel"><div class="nn-empty">Стратегии появятся после обучения</div></div>
-            </div>
+            <div id="nn-panel-root"></div>
         </div>
         <!-- LIVE MONITOR -->
         <div class="panel" id="panel-live">

@@ -8,7 +8,7 @@ const btEngineRouter = require('./backtest_engine');
 const path    = require('path');
 const session = require('express-session');
 const vm      = require('vm');
-const btEngineRouter = require('./backtest_engine');
+//const btEngineRouter = require('./backtest_engine');
 
 const app = express();
 
@@ -1033,6 +1033,53 @@ app.get('/api/journal', requireAuth, async (req, res) => {
   } catch (e) { res.json([]); }
 });
 
+// ── /api/journal/bets — алиас, который используют dashboard.js и journal.js
+app.get('/api/journal/bets', requireAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 500;
+    const days  = parseInt(req.query.days)  || null;
+
+    if (pgPool) {
+      let query  = 'SELECT *, date::text as date FROM journal WHERE user_id=$1';
+      const params = [req.session.userId];
+      if (days) {
+        query += ` AND date >= NOW() - INTERVAL '${days} days'`;
+      }
+      query += ` ORDER BY date DESC LIMIT ${limit}`;
+      const r = await pgPool.query(query, params);
+      const bets = r.rows.map(b => ({
+        ...b,
+        match:  b.match_name || b.match || '',
+        result: b.result || 'pending',
+        pnl:    parseFloat(b.pnl) || 0,
+        odds:   parseFloat(b.odds) || 1,
+        stake:  parseFloat(b.stake) || 0,
+      }));
+      return res.json({ bets, total: bets.length });
+    }
+    // Без БД — пустой ответ (фронтенд сам упадёт на localStorage)
+    res.json({ bets: [], total: 0 });
+  } catch (e) {
+    console.error('[journal/bets]', e.message);
+    res.json({ bets: [], total: 0 });
+  }
+});
+
+app.post('/api/journal/bets', requireAuth, async (req, res) => {
+  const { date, sport, match, market, selection, odds, stake, result, pnl, strategy } = req.body;
+  try {
+    if (pgPool) {
+      const r = await pgPool.query(
+        `INSERT INTO journal (user_id, date, sport, match_name, market, selection, odds, stake, result, pnl, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [req.session.userId, date, sport, match, market, selection, odds, stake, result, pnl, strategy || '']
+      );
+      return res.json({ ok: true, bet: r.rows[0] });
+    }
+    res.json({ ok: true, bet: { id: Date.now(), ...req.body } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/journal', requireAuth, async (req, res) => {
   const { date, sport, match_name, market, selection, odds, stake, result, pnl, bookmaker, notes } = req.body;
   try {
@@ -1053,7 +1100,41 @@ app.delete('/api/journal/:id', requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// ══════════════════════════════════════════════════════════
+//  ALERTS
+// ══════════════════════════════════════════════════════════
+// In-memory хранилище алертов (можно расширить до PG)
+const _alertsStore = new Map();
 
+app.get('/api/alerts', requireAuth, (req, res) => {
+  const userId = req.session.userId || 0;
+  const list = _alertsStore.get(userId) || [];
+  res.json({ alerts: list });
+});
+
+app.post('/api/alerts', requireAuth, (req, res) => {
+  const userId = req.session.userId || 0;
+  const list = _alertsStore.get(userId) || [];
+  const alert = { ...req.body, id: req.body.id || Date.now(), userId };
+  list.unshift(alert);
+  _alertsStore.set(userId, list);
+  res.json({ ok: true, alert });
+});
+
+app.patch('/api/alerts/:id', requireAuth, (req, res) => {
+  const userId = req.session.userId || 0;
+  const list = _alertsStore.get(userId) || [];
+  const alert = list.find(a => String(a.id) === req.params.id);
+  if (alert) Object.assign(alert, req.body);
+  res.json({ ok: true });
+});
+
+app.delete('/api/alerts/:id', requireAuth, (req, res) => {
+  const userId = req.session.userId || 0;
+  const list = (_alertsStore.get(userId) || []).filter(a => String(a.id) !== req.params.id);
+  _alertsStore.set(userId, list);
+  res.json({ ok: true });
+});
 // ══════════════════════════════════════════════════════════
 //  AI STRATEGY
 // ══════════════════════════════════════════════════════════

@@ -1297,6 +1297,8 @@ const backtestEngine = {
       ]},
       options:{...base,plugins:{legend:{display:hasParlays,labels:{color:tc,boxWidth:10}}}},
     });
+    // Подключаем интерактивность ко всем графикам
+    this._attachChartInteractions();
   },
 
   sendToAI() {
@@ -1382,6 +1384,332 @@ ${tradeSample || 'нет данных'}
     a.href = URL.createObjectURL(blob);
     a.download = `backtest_${Date.now()}.csv`;
     a.click();
+  },
+  // ── FULLSCREEN + CLICK-TO-TABLE ─────────────────────────────────────────
+  _attachChartInteractions() {
+    // Карты: id canvas → ключ в this.charts
+    const chartMap = {
+      'chartBtEquity':   'equity',
+      'chartBtDrawdown': 'dd',
+      'chartBtMonthly':  'monthly',
+      'chartBtDistrib':  'distrib',
+    };
+
+    Object.entries(chartMap).forEach(([canvasId, chartKey]) => {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const card = canvas.closest('.chart-card');
+      if (!card) return;
+
+      // ── Кнопка развернуть — добавляем один раз ──
+      const header = card.querySelector('.chart-card-header');
+      if (header && !header.querySelector('.btn-chart-fs')) {
+        const btn = document.createElement('button');
+        btn.className = 'ctrl-btn sm btn-chart-fs';
+        btn.innerHTML = '⛶';
+        btn.title = 'Развернуть во весь экран (ESC — закрыть)';
+        btn.style.cssText = 'opacity:0.4;font-size:13px;padding:1px 7px;margin-left:8px;';
+        btn.onmouseenter = () => btn.style.opacity = '1';
+        btn.onmouseleave = () => btn.style.opacity = '0.4';
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          this._openFullscreen(canvasId, chartKey, header.querySelector('span')?.textContent || '');
+        };
+        header.appendChild(btn);
+      }
+
+      // ── Клик по Equity → подсветить ставку в таблице ──
+      if (canvasId === 'chartBtEquity') {
+        canvas.style.cursor = 'crosshair';
+        // Убираем старый listener чтобы не дублировать
+        canvas.onclick = null;
+        canvas.onclick = (e) => this._onEquityClick(e);
+      }
+    });
+  },
+
+  _onEquityClick(e) {
+    const chart = this.charts.equity;
+    if (!chart) return;
+
+    // Получаем ближайшую точку к клику
+    const pts = chart.getElementsAtEventForMode(e, 'nearest', { intersect: false }, false);
+    if (!pts.length) return;
+
+    const pointIndex = pts[0].index; // индекс точки на equity curve
+    // equity[0] = стартовый банкролл, equity[i] = после i-й ставки
+    // trades[i-1] = ставка которая привела к equity[i]
+    const trades = this._lastResult?.trades || [];
+    const tradeIndex = pointIndex - 1; // -1 потому что equity[0] — до первой ставки
+
+    if (tradeIndex < 0 || tradeIndex >= trades.length) return;
+    const trade = trades[tradeIndex];
+
+    // Показываем подсказку рядом с курсором
+    this._showClickTooltip(e, trade);
+
+    // Скроллим таблицу к этой строке
+    this._scrollTableToTrade(tradeIndex, trade);
+  },
+
+  _showClickTooltip(mouseEvent, trade) {
+    // Удаляем предыдущий тултип
+    const old = document.getElementById('btClickTooltip');
+    if (old) old.remove();
+
+    const tip = document.createElement('div');
+    tip.id = 'btClickTooltip';
+    const pnlColor = parseFloat(trade.pnl) >= 0 ? '#00e676' : '#ff4560';
+    tip.innerHTML = `
+      <div style="font-weight:700;margin-bottom:4px">${trade.date}</div>
+      <div style="color:var(--text2);margin-bottom:2px">${trade.match}</div>
+      <div style="display:flex;gap:10px;font-size:11px">
+        <span>${trade.market} @ <strong>${(+trade.odds).toFixed(2)}</strong></span>
+        <span class="${trade.won==='W'?'positive':'negative'}">${trade.won==='W'?'✅ WIN':'❌ LOSS'}</span>
+        <span style="color:${pnlColor}">${parseFloat(trade.pnl)>=0?'+':''}${(+trade.pnl).toFixed(2)}</span>
+      </div>
+    `;
+    tip.style.cssText = `
+      position: fixed;
+      left: ${mouseEvent.clientX + 12}px;
+      top:  ${mouseEvent.clientY - 10}px;
+      background: var(--bg2, #1a2035);
+      border: 1px solid rgba(0,212,255,0.3);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text1, #e2e8f0);
+      z-index: 9998;
+      pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      max-width: 280px;
+      animation: fadeIn 0.15s ease;
+    `;
+    document.body.appendChild(tip);
+
+    // Убираем через 4 секунды
+    setTimeout(() => tip.remove(), 4000);
+  },
+
+  _scrollTableToTrade(tradeIndex, trade) {
+    const container = document.getElementById('btTradesTable');
+    if (!container) return;
+
+    // Таблица отрисована в обратном порядке (slice(-300).reverse())
+    // поэтому нужно пересчитать индекс
+    const trades = this._lastResult?.trades || [];
+    const total = trades.length;
+    const displayCount = Math.min(300, total);
+    // В таблице строки reversed: первая строка = последняя ставка
+    // tradeIndex — индекс в оригинальном массиве (0 = первая)
+    const reversedIndex = (total - 1 - tradeIndex); // позиция в reversed массиве
+    const tableRowIndex = reversedIndex; // так как slice(-300) берёт последние 300
+
+    // Если ставка вне отображаемых 300 — предупреждаем
+    if (reversedIndex >= 300) {
+      const info = document.createElement('div');
+      info.style.cssText = 'color:var(--text3);font-size:11px;padding:4px 8px;';
+      info.textContent = `⚠️ Ставка #${tradeIndex+1} вне диапазона таблицы (показаны последние 300)`;
+      container.prepend(info);
+      setTimeout(() => info.remove(), 3000);
+      return;
+    }
+
+    const tbody = container.querySelector('tbody');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr');
+    const targetRow = rows[tableRowIndex];
+    if (!targetRow) return;
+
+    // Убираем предыдущую подсветку
+    tbody.querySelectorAll('tr.bt-row-highlighted').forEach(r => {
+      r.classList.remove('bt-row-highlighted');
+      r.style.background = '';
+      r.style.outline = '';
+    });
+
+    // Подсвечиваем строку
+    targetRow.classList.add('bt-row-highlighted');
+    targetRow.style.background = 'rgba(0,212,255,0.12)';
+    targetRow.style.outline = '1px solid rgba(0,212,255,0.4)';
+    targetRow.style.transition = 'background 0.3s';
+
+    // Скроллим таблицу к строке
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => {
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 300);
+
+    // Снимаем подсветку через 4 секунды
+    setTimeout(() => {
+      targetRow.classList.remove('bt-row-highlighted');
+      targetRow.style.background = '';
+      targetRow.style.outline = '';
+    }, 4000);
+  },
+
+  _openFullscreen(canvasId, chartKey, title) {
+    // Закрыть если уже открыт
+    const existingOverlay = document.getElementById('btFsOverlay');
+    if (existingOverlay) {
+      existingOverlay.remove();
+      return;
+    }
+
+    const srcChart = this.charts[chartKey];
+    if (!srcChart) return;
+
+    // Создаём оверлей
+    const overlay = document.createElement('div');
+    overlay.id = 'btFsOverlay';
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 11, 18, 0.96);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      animation: fadeIn 0.2s ease;
+    `;
+
+    overlay.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <span style="font-size:18px;font-weight:700;color:#e2e8f0">${title}</span>
+          <span style="color:#8892a4;font-size:12px;margin-left:12px">
+            ${chartKey === 'equity' ? 'Кликни по точке → подсветит ставку в таблице' : ''}
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${chartKey === 'equity' ? `
+          <button id="btFsBtnPrev" style="background:var(--bg2,#1a2035);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;padding:4px 12px;border-radius:6px;cursor:pointer">◀ Пред. просадка</button>
+          <button id="btFsBtnNext" style="background:var(--bg2,#1a2035);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;padding:4px 12px;border-radius:6px;cursor:pointer">След. просадка ▶</button>
+          ` : ''}
+          <button id="btFsBtnClose" style="background:none;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:14px">✕ ESC</button>
+        </div>
+      </div>
+      <div style="flex:1;position:relative;min-height:0">
+        <canvas id="btFsCanvas"></canvas>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Рендерим копию графика на fullscreen canvas
+    setTimeout(() => {
+      const fsCanvas = document.getElementById('btFsCanvas');
+      if (!fsCanvas) return;
+
+      // Глубокое копирование конфига
+      const cfg = srcChart.config;
+      this._fsChart = new Chart(fsCanvas, {
+        type: cfg.type,
+        data: JSON.parse(JSON.stringify(cfg.data)),
+        options: {
+          ...JSON.parse(JSON.stringify(cfg.options || {})),
+          maintainAspectRatio: false,
+          responsive: true,
+          animation: false,
+          // Увеличиваем точки для удобства клика
+          elements: {
+            point: { radius: chartKey === 'equity' ? 3 : 0, hoverRadius: 6 },
+          },
+          plugins: {
+            ...(cfg.options?.plugins || {}),
+            tooltip: {
+              enabled: true,
+              callbacks: {
+                title: (items) => {
+                  if (chartKey !== 'equity') return items[0]?.label || '';
+                  const idx = items[0]?.dataIndex;
+                  const trades = this._lastResult?.trades || [];
+                  if (idx > 0 && trades[idx-1]) return trades[idx-1].date;
+                  return 'Старт';
+                },
+                label: (item) => {
+                  if (chartKey !== 'equity') return ` ${item.formattedValue}`;
+                  const idx = item.dataIndex;
+                  const trades = this._lastResult?.trades || [];
+                  if (idx > 0 && trades[idx-1]) {
+                    const t = trades[idx-1];
+                    return [
+                      ` Банкролл: ${(+item.parsed.y).toFixed(2)}`,
+                      ` ${t.match}`,
+                      ` ${t.market} @ ${(+t.odds).toFixed(2)} → ${t.won==='W'?'WIN':'LOSS'} (${parseFloat(t.pnl)>=0?'+':''}${(+t.pnl).toFixed(2)})`,
+                    ];
+                  }
+                  return ` Старт: ${(+item.parsed.y).toFixed(2)}`;
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Клик по fullscreen equity → скролл таблицы
+      if (chartKey === 'equity') {
+        fsCanvas.style.cursor = 'crosshair';
+        fsCanvas.onclick = (e) => {
+          const pts = this._fsChart.getElementsAtEventForMode(e, 'nearest', { intersect: false }, false);
+          if (!pts.length) return;
+          const tradeIndex = pts[0].index - 1;
+          const trades = this._lastResult?.trades || [];
+          if (tradeIndex >= 0 && trades[tradeIndex]) {
+            this._showClickTooltip(e, trades[tradeIndex]);
+            overlay.remove();
+            if (this._fsChart) { this._fsChart.destroy(); this._fsChart = null; }
+            this._scrollTableToTrade(tradeIndex, trades[tradeIndex]);
+          }
+        };
+      }
+
+      // Кнопки навигации по просадкам
+      if (chartKey === 'equity') {
+        this._ddIdx = 0;
+        const equity = this._lastResult?.equity || [];
+        // Находим все точки максимальных просадок
+        this._ddPoints = [];
+        let peak = equity[0], peakI = 0;
+        equity.forEach((v, i) => {
+          if (v > peak) { peak = v; peakI = i; }
+          const dd = peak > 0 ? (peak - v) / peak : 0;
+          if (dd > 0.1) this._ddPoints.push({ i, dd, peakI });
+        });
+        // Дедуплицируем — берём только начало каждой просадки >10%
+        const ddUniq = [];
+        let lastPeak = -1;
+        this._ddPoints.forEach(p => {
+          if (p.peakI !== lastPeak) { ddUniq.push(p); lastPeak = p.peakI; }
+        });
+        this._ddPoints = ddUniq;
+
+        const navigateDD = (dir) => {
+          if (!this._ddPoints.length) return;
+          this._ddIdx = (this._ddIdx + dir + this._ddPoints.length) % this._ddPoints.length;
+          const pt = this._ddPoints[this._ddIdx];
+          // Скроллим к этой точке на графике через setDataLimits
+          this._fsChart.options.scales.x.min = Math.max(0, pt.i - 20);
+          this._fsChart.options.scales.x.max = Math.min(equity.length - 1, pt.i + 20);
+          this._fsChart.update();
+        };
+
+        document.getElementById('btFsBtnPrev')?.addEventListener('click', () => navigateDD(-1));
+        document.getElementById('btFsBtnNext')?.addEventListener('click', () => navigateDD(1));
+      }
+    }, 60);
+
+    // Закрытие
+    const close = () => {
+      overlay.remove();
+      if (this._fsChart) { this._fsChart.destroy(); this._fsChart = null; }
+    };
+    document.getElementById('btFsBtnClose')?.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    const escHandler = (e) => {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
   },
   destroyCharts() { Object.values(this.charts).forEach(c=>{try{c.destroy();}catch(e){}}); this.charts={}; },
   stop() { this.running=false; this.stopUI(); },
