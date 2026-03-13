@@ -92,8 +92,10 @@ try {
 // ── Neural Networks ────────────────────────────────────────────────────────
 app.locals.clickhouse = clickhouse;
 
-const realtimeMonitor = require('./realtime-monitor');
-app.use('/api/realtime', requireAuth, realtimeMonitor);
+try {
+  app.use('/api/realtime', requireAuth, require('./realtime-monitor'));
+  console.log('✅ realtime-monitor loaded');
+} catch(e) { console.warn('⚠️  realtime-monitor:', e.message); }
 
 const { router: neuralRoutes, initNeuralPG } = require('./neural');
 app.use('/api/bt', requireAuth, btEngineRouter);
