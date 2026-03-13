@@ -92,10 +92,6 @@ try {
 // ── Neural Networks ────────────────────────────────────────────────────────
 app.locals.clickhouse = clickhouse;
 
-try {
-  app.use('/api/realtime', requireAuth, require('./realtime-monitor'));
-  console.log('✅ realtime-monitor loaded');
-} catch(e) { console.warn('⚠️  realtime-monitor:', e.message); }
 
 const { router: neuralRoutes, initNeuralPG } = require('./neural');
 app.use('/api/bt', requireAuth, btEngineRouter);
@@ -1372,6 +1368,12 @@ app.get('/api/collect/progress/:taskId', requireAuth, (req, res) => {
   if (!t) return res.status(404).json({ error: 'Not found' });
   res.json(t);
 });
+
+try {
+  app.use('/api/realtime', requireAuth, require('./realtime-monitor'));
+  console.log('✅ realtime-monitor loaded');
+} catch(e) { console.warn('⚠️  realtime-monitor:', e.message); }
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',

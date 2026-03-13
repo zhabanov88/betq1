@@ -170,3 +170,247 @@
   z-index: 9999; pointer-events: none;
 }
 .bq-toast.show { transform: translateY(0); opacity: 1; }
+
+.value-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.value-filters-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.vf-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+.vf-mode-btn {
+  flex: 1;
+  opacity: .6;
+  transition: opacity .15s;
+}
+.vf-mode-btn.active {
+  opacity: 1;
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+}
+.vf-strat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.vf-strat-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  transition: border-color .12s;
+}
+.vf-strat-check:hover { border-color: var(--accent); }
+.vf-strat-check input { flex-shrink: 0; }
+.vf-strat-roi {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+}
+.vf-strat-roi.pos { color: var(--green); }
+.vf-strat-roi.neg { color: var(--red); }
+.vf-strat-src {
+  font-size: 10px;
+  color: var(--text3);
+}
+.vf-edge-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0,212,255,.15);
+  color: var(--accent);
+}
+.vf-edge-badge.warm {
+  background: rgba(255,214,0,.15);
+  color: #ffd740;
+}
+.vf-edge-badge.hot {
+  background: rgba(0,230,118,.2);
+  color: var(--green);
+  animation: pulse 1.5s infinite;
+}
+.vf-hint-box {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.vf-hint-box.info {
+  background: rgba(0,212,255,.08);
+  border: 1px solid rgba(0,212,255,.25);
+  color: var(--text2);
+}
+.vf-hint-box.warn {
+  background: rgba(255,214,0,.08);
+  border: 1px solid rgba(255,214,0,.3);
+  color: #ffd740;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VALUE FINDER v2 — дополнительные стили
+   Добавить в конец файла public/css/live-value-clv.css
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Основной layout ──────────────────────────────────────────────────────── */
+.value-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 4px;
+}
+.value-filters-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Mode toggle (Лайн / Лайв) ───────────────────────────────────────────── */
+.vf-mode-toggle {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+.vf-mode-btn {
+  flex: 1;
+  opacity: .55;
+  transition: opacity .15s, background .15s;
+  font-size: 12px !important;
+  padding: 5px 8px !important;
+}
+.vf-mode-btn.active {
+  opacity: 1;
+  background: var(--accent) !important;
+  color: #000 !important;
+  font-weight: 700;
+}
+
+/* ── Strategy selector ───────────────────────────────────────────────────── */
+.vf-strat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+  margin-bottom: 6px;
+}
+.vf-strat-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  transition: border-color .12s;
+  user-select: none;
+}
+.vf-strat-check:hover {
+  border-color: var(--accent);
+}
+.vf-strat-check input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.vf-strat-roi {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.vf-strat-roi.pos { color: var(--green); }
+.vf-strat-roi.neg { color: var(--red); }
+.vf-strat-src {
+  font-size: 10px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+/* ── Edge badge ──────────────────────────────────────────────────────────── */
+.vf-edge-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0,212,255,.12);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.vf-edge-badge.warm {
+  background: rgba(255,214,0,.15);
+  color: #ffd740;
+}
+.vf-edge-badge.hot {
+  background: rgba(0,230,118,.18);
+  color: var(--green);
+}
+
+/* ── Source / hint boxes ─────────────────────────────────────────────────── */
+.vf-hint-box {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.vf-hint-box.info {
+  background: rgba(0,212,255,.07);
+  border: 1px solid rgba(0,212,255,.2);
+  color: var(--text2);
+}
+.vf-hint-box.warn {
+  background: rgba(255,214,0,.07);
+  border: 1px solid rgba(255,214,0,.25);
+  color: #ffd740;
+}
+
+/* ── Summary bar ─────────────────────────────────────────────────────────── */
+.vf-summary {
+  padding: 8px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+.vf-summary:empty { display: none; }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .value-layout {
+    grid-template-columns: 1fr;
+  }
+  .vf-strat-list {
+    max-height: 160px;
+  }
+}
+
+

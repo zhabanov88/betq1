@@ -1,51 +1,52 @@
 'use strict';
 /**
- * BetQuant — server/realtime-monitor.js  (v2 — исправленный)
- * ===========================================================
- * Подключить в server/index.js ОДНОЙ СТРОКОЙ в конце блока роутов:
+ * BetQuant — server/realtime-monitor.js  (v3 — финальный)
  *
- *   try {
- *     app.use('/api/realtime', requireAuth, require('./realtime-monitor'));
- *   } catch(e) { console.warn('realtime-monitor:', e.message); }
+ * Ошибки предыдущих версий:
+ * 1. v1 использовал global fetch — недоступен в Node < 18
+ * 2. v2 имел мёртвую переменную opts и опечатку в path: '/?' + ${qs}
+ * 3. В index.js роут подключался ДО объявления requireAuth → ReferenceError
+ *    (исправляется в index.js, не здесь)
  */
 
-const express  = require('express');
+const express    = require('express');
 const { execFile } = require('child_process');
-const http     = require('http');
-const router   = express.Router();
+const http       = require('http');
+const router     = express.Router();
 
 const CONTAINER = process.env.REALTIME_CONTAINER || 'betquant-realtime';
-const CH_HOST   = process.env.CH_HOST            || 'http://localhost:8123';
+const CH_HOST   = process.env.CH_HOST            || 'http://clickhouse:8123';
 const CH_DB     = process.env.CH_DATABASE        || 'betquant';
 
-// ── ClickHouse HTTP query (без fetch, через http модуль) ─────────────────────
+// ── ClickHouse HTTP query — только встроенный http модуль ────────────────────
 function chQuery(sql) {
   return new Promise((resolve) => {
-    const url   = new URL(CH_HOST);
-    const qs    = `database=${encodeURIComponent(CH_DB)}&query=${encodeURIComponent(sql)}`;
-    const opts  = {
-      hostname: url.hostname,
-      port:     url.port || 8123,
-      path:     `/?' + ${qs}`,
-      method:   'GET',
-    };
-    // Используем простой GET с query-string
-    const fullPath = `/?database=${encodeURIComponent(CH_DB)}&query=${encodeURIComponent(sql)}`;
+    let parsed;
+    try { parsed = new URL(CH_HOST); } catch { return resolve(null); }
+
+    const path = `/?database=${encodeURIComponent(CH_DB)}&query=${encodeURIComponent(sql)}`;
+
     const req = http.request(
-      { hostname: url.hostname, port: parseInt(url.port) || 8123, path: fullPath, method: 'GET', timeout: 8000 },
+      {
+        hostname: parsed.hostname,
+        port:     parseInt(parsed.port) || 8123,
+        path,
+        method:   'GET',
+        timeout:  8000,
+      },
       (res) => {
-        let data = '';
-        res.on('data', d => data += d);
-        res.on('end', () => resolve(data.trim()));
+        let buf = '';
+        res.on('data', d => buf += d);
+        res.on('end', () => resolve(buf.trim()));
       }
     );
-    req.on('error', () => resolve(null));
+    req.on('error',   () => resolve(null));
     req.on('timeout', () => { req.destroy(); resolve(null); });
     req.end();
   });
 }
 
-// ── Docker exec helper ────────────────────────────────────────────────────────
+// ── Docker helper — через execFile (docker CLI) ───────────────────────────────
 function docker(args, timeoutMs = 15000) {
   return new Promise((resolve) => {
     execFile('docker', args, { timeout: timeoutMs }, (err, stdout, stderr) => {
@@ -58,19 +59,33 @@ function docker(args, timeoutMs = 15000) {
   });
 }
 
-// ── Проверка доступности Docker ───────────────────────────────────────────────
+// ── Проверка доступности Docker socket ───────────────────────────────────────
 async function dockerAvailable() {
   const r = await docker(['info', '--format', '{{.ServerVersion}}'], 5000);
   return r.ok && r.stdout.length > 0;
 }
 
-// ── GET /api/realtime/status ─────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// GET /api/realtime/ping — быстрая самопроверка (без Docker, без CH)
+// ════════════════════════════════════════════════════════════════════════════
+router.get('/ping', (req, res) => {
+  res.json({
+    ok:        true,
+    container: CONTAINER,
+    ch:        CH_HOST,
+    db:        CH_DB,
+    ts:        new Date().toISOString(),
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// GET /api/realtime/status
+// ════════════════════════════════════════════════════════════════════════════
 router.get('/status', async (req, res) => {
   const now = Date.now();
 
   // 1. Docker контейнер
-  let container = { status: 'unknown', startedAt: null, restarts: 0, dockerAvailable: false };
-
+  let container = { status: 'unknown', startedAt: null, restarts: 0, dockerAvailable: false, error: null };
   const hasDocker = await dockerAvailable();
   container.dockerAvailable = hasDocker;
 
@@ -80,51 +95,58 @@ router.get('/status', async (req, res) => {
       '{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}',
       CONTAINER,
     ]);
-    if (r.ok && r.stdout && !r.stdout.includes('Error')) {
+    if (r.ok && r.stdout && !r.stdout.startsWith('Error')) {
       const [status, startedAt, restarts] = r.stdout.split('|');
-      container = { status, startedAt, restarts: parseInt(restarts) || 0, dockerAvailable: true };
+      container = { status, startedAt, restarts: parseInt(restarts) || 0, dockerAvailable: true, error: null };
     } else {
-      // Контейнер не найден — значит не создан
-      container.status    = 'not_found';
-      container.error     = r.stderr || 'Container not found';
-      container.dockerAvailable = true;
+      container.status = 'not_found';
+      container.error  = r.stderr || 'Container not found. Run: docker compose up -d realtime';
     }
+  } else {
+    container.error = 'Docker socket недоступен. Добавьте в docker-compose.yml сервис app:\n  volumes:\n    - /var/run/docker.sock:/var/run/docker.sock:ro';
   }
 
-  // 2. Таблицы ClickHouse
-  const tablesSql = [
-    `SELECT 'live_stats' AS t, count() AS n, toString(max(recorded_at)) AS last FROM ${CH_DB}.live_stats`,
-    `SELECT 'odds', count(), toString(max(recorded_at)) FROM ${CH_DB}.odds`,
-    `SELECT 'odds_timeseries', count(), toString(max(timestamp)) FROM ${CH_DB}.odds_timeseries`,
-    `SELECT 'predictions', count(), toString(max(created_at)) FROM ${CH_DB}.predictions`,
-    `SELECT 'strategy_signals', count(), toString(max(created_at)) FROM ${CH_DB}.strategy_signals`,
-    `SELECT 'player_stats', count(), toString(max(date)) FROM ${CH_DB}.player_stats`,
-  ].join(' UNION ALL ') + ' FORMAT TabSeparated';
+  // 2. Таблицы ClickHouse — каждая таблица отдельным запросом (UNION ALL ломается если таблица не существует)
+  const TABLE_DEFS = [
+    { name: 'live_stats',        col: 'recorded_at', maxAgeMin: 10   },
+    { name: 'odds',              col: 'recorded_at', maxAgeMin: 1500 },
+    { name: 'odds_timeseries',   col: 'timestamp',   maxAgeMin: 1500 },
+    { name: 'predictions',       col: 'created_at',  maxAgeMin: 130  },
+    { name: 'strategy_signals',  col: 'created_at',  maxAgeMin: 130  },
+    { name: 'player_stats',      col: 'date',        maxAgeMin: 1500 },
+  ];
 
-  const tablesRaw = await chQuery(tablesSql);
-  const tables = [];
+  const FREQ_LABELS = {
+    live_stats: 'каждую минуту', odds: 'раз в сутки',
+    odds_timeseries: 'раз в сутки', predictions: 'каждые 2ч',
+    strategy_signals: 'каждые 2ч', player_stats: 'раз в сутки',
+  };
 
-  if (tablesRaw) {
-    const maxAgeMin = {
-      live_stats: 10, odds: 1500, odds_timeseries: 1500,
-      predictions: 130, strategy_signals: 130, player_stats: 1500,
+  const tables = await Promise.all(TABLE_DEFS.map(async ({ name, col, maxAgeMin }) => {
+    const sql = `SELECT count() AS n, toString(max(${col})) AS last FROM ${CH_DB}.${name} FORMAT TabSeparated`;
+    const raw = await chQuery(sql);
+
+    if (!raw) {
+      return { name, count: 0, last: null, ageMin: null, healthy: false, error: 'CH недоступен', freq: FREQ_LABELS[name] };
+    }
+
+    const parts = raw.split('\t');
+    const count = parseInt(parts[0]) || 0;
+    const last  = parts[1] && parts[1] !== '\\N' && parts[1] !== '1970-01-01 00:00:00' ? parts[1] : null;
+    const lastMs = last ? new Date(last.replace(' ', 'T') + 'Z').getTime() : 0;
+    const ageMin = lastMs ? Math.round((now - lastMs) / 60000) : null;
+
+    return {
+      name,
+      count,
+      last,
+      ageMin,
+      healthy: ageMin !== null && ageMin <= maxAgeMin,
+      freq:    FREQ_LABELS[name],
     };
-    for (const line of tablesRaw.split('\n').filter(Boolean)) {
-      const [name, count, last] = line.split('\t');
-      if (!name) continue;
-      const lastMs  = last && last !== '1970-01-01 00:00:00' && last !== '\\N'
-        ? new Date(last.replace(' ', 'T') + 'Z').getTime() : 0;
-      const ageMin  = lastMs ? Math.round((now - lastMs) / 60000) : null;
-      const maxAge  = maxAgeMin[name] || 1440;
-      tables.push({
-        name,
-        count:   parseInt(count) || 0,
-        last:    last && last !== '\\N' ? last : null,
-        ageMin,
-        healthy: ageMin !== null && ageMin <= maxAge,
-      });
-    }
-  }
+  }));
+
+  const chConnected = tables.some(t => t.error !== 'CH недоступен');
 
   // 3. Расход The Odds API
   const oddsRaw = await chQuery(
@@ -136,64 +158,64 @@ router.get('/status', async (req, res) => {
   res.json({
     container,
     tables,
+    chConnected,
     oddsApi: {
       requestsThisMonth: oddsRequests,
       rowsThisMonth:     oddsRows,
       limit:             400,
-      pct:               Math.min(100, Math.round(oddsRequests / 400 * 100)),
+      pct:               Math.min(100, Math.round(oddsRequests / 4)),
     },
-    chConnected: tablesRaw !== null,
-    timestamp:   new Date().toISOString(),
+    timestamp: new Date().toISOString(),
   });
 });
 
-// ── GET /api/realtime/logs ────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// GET /api/realtime/logs
+// ════════════════════════════════════════════════════════════════════════════
 router.get('/logs', async (req, res) => {
   const lines = Math.min(parseInt(req.query.lines) || 100, 500);
-
   const hasDocker = await dockerAvailable();
+
   if (!hasDocker) {
-    return res.json({ lines: ['Docker недоступен из контейнера. Добавьте /var/run/docker.sock в volumes.'], container: CONTAINER });
+    return res.json({
+      lines: ['❌ Docker socket недоступен внутри контейнера app.', 'Добавьте в docker-compose.yml (сервис app):', '  volumes:', '    - /var/run/docker.sock:/var/run/docker.sock:ro', 'Затем: docker compose up -d app'],
+      container: CONTAINER,
+    });
   }
 
+  // docker logs пишет в stderr (это нормально для docker)
   const result = await docker(['logs', '--tail', String(lines), '--timestamps', CONTAINER], 20000);
-  const raw    = (result.stderr + '\n' + result.stdout).trim(); // docker logs → stderr
-  const logLines = raw.split('\n').filter(Boolean).reverse();
+  const combined = [result.stderr, result.stdout].filter(Boolean).join('\n');
+  const logLines = combined.split('\n').filter(Boolean).reverse();
 
-  res.json({ lines: logLines.length ? logLines : ['Логов нет или контейнер не запущен'], container: CONTAINER });
+  res.json({
+    lines: logLines.length ? logLines : ['Контейнер не запущен или логов нет'],
+    container: CONTAINER,
+  });
 });
 
-// ── POST /api/realtime/restart ────────────────────────────────────────────────
-router.post('/restart', async (req, res) => {
+// ════════════════════════════════════════════════════════════════════════════
+// POST /api/realtime/restart|stop|start
+// ════════════════════════════════════════════════════════════════════════════
+async function dockerAction(action, res) {
   const hasDocker = await dockerAvailable();
-  if (!hasDocker) return res.json({ ok: false, message: 'Docker сокет недоступен. Добавьте /var/run/docker.sock в volumes сервиса app.' });
+  if (!hasDocker) {
+    return res.json({
+      ok: false,
+      message: 'Docker socket недоступен. Добавьте /var/run/docker.sock в volumes сервиса app и пересоберите: docker compose up -d app',
+    });
+  }
+  const result = await docker([action, CONTAINER], 30000);
+  res.json({
+    ok:      result.ok,
+    message: result.ok
+      ? `✅ Контейнер ${CONTAINER}: ${action === 'restart' ? 'перезапущен' : action === 'stop' ? 'остановлен' : 'запущен'}`
+      : (result.stderr || `Ошибка команды docker ${action}`),
+  });
+}
 
-  const result = await docker(['restart', CONTAINER], 30000);
-  res.json({ ok: result.ok, message: result.ok ? `${CONTAINER} перезапущен` : (result.stderr || 'Ошибка') });
-});
-
-// ── POST /api/realtime/stop ───────────────────────────────────────────────────
-router.post('/stop', async (req, res) => {
-  const hasDocker = await dockerAvailable();
-  if (!hasDocker) return res.json({ ok: false, message: 'Docker сокет недоступен. Добавьте /var/run/docker.sock в volumes сервиса app.' });
-
-  const result = await docker(['stop', CONTAINER], 20000);
-  res.json({ ok: result.ok, message: result.ok ? `${CONTAINER} остановлен` : (result.stderr || 'Ошибка') });
-});
-
-// ── POST /api/realtime/start ──────────────────────────────────────────────────
-router.post('/start', async (req, res) => {
-  const hasDocker = await dockerAvailable();
-  if (!hasDocker) return res.json({ ok: false, message: 'Docker сокет недоступен. Добавьте /var/run/docker.sock в volumes сервиса app.' });
-
-  const result = await docker(['start', CONTAINER], 20000);
-  res.json({ ok: result.ok, message: result.ok ? `${CONTAINER} запущен` : (result.stderr || 'Ошибка') });
-});
-
-// ── GET /api/realtime/ping ────────────────────────────────────────────────────
-// Быстрая проверка что роут работает
-router.get('/ping', (req, res) => {
-  res.json({ ok: true, ch: CH_HOST, container: CONTAINER, ts: new Date().toISOString() });
-});
+router.post('/restart', (req, res) => dockerAction('restart', res));
+router.post('/stop',    (req, res) => dockerAction('stop',    res));
+router.post('/start',   (req, res) => dockerAction('start',   res));
 
 module.exports = router;
