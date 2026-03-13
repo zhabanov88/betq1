@@ -145,6 +145,7 @@ showPanel(name) {
   if (name === 'telegram'   && typeof telegramSettings !== 'undefined') telegramSettings.init();
   if (name === 'llm-settings' && typeof llmSettings   !== 'undefined') llmSettings.init();
   if (name === 'realtime' && typeof realtimePanel !== 'undefined') realtimePanel.init();
+  if (name === 'mappings') mappings.init();
 },
   
   setSport(sport) {

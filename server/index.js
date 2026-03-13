@@ -110,6 +110,23 @@ app.use('/api/live',  liveRoutes);
 app.use('/api/value', valueRoutes);
 app.use('/api/clv',   clvRoutes);
 
+try {
+  const { router: matchingRouter, init: matchingInit } = require('./strategy-matching');
+  app.use('/api/matching', requireAuth, matchingRouter);
+  // Инициализируем с DB соединениями когда они готовы
+  const initMatching = () => {
+    if (pgPool && clickhouse) {
+      matchingInit(pgPool, clickhouse);
+      console.log('✅ strategy-matching engine loaded');
+    } else {
+      setTimeout(initMatching, 2000);
+    }
+  };
+  setTimeout(initMatching, 1000);
+} catch(e) {
+  console.warn('⚠️  strategy-matching:', e.message);
+}
+
 // ── Stats routes (для "Графики и коэффициенты" + "Статистика") ───────────
 const _statsRoutes = (() => {
   try {
@@ -1377,12 +1394,12 @@ try {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: '3.3.0',
+    version: '3.4.0',
     pg: !!pgPool,
     ch: !!clickhouse,
     node: process.version,
     etl: { v1: 'betquant-etl/run_etl.py', v2: 'sports-etl-v2/run_etl_v2.py' },
-    routes: ['auth', 'db', 'backtest', 'etl', 'journal', 'strategies', 'ai/strategy'],
+    routes: ['auth', 'db', 'backtest', 'etl', 'journal', 'strategies', 'ai/strategy', 'matching', 'mappings'],
   });
 });
 

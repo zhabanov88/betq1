@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/css/live-value-clv.css">
     <link rel="stylesheet" href="/css/priority2.css">
     <link rel="stylesheet" href="/css/telegram.css">
+    <link rel="stylesheet" href="/css/library-mapping.css">
 </head>
 <body class="dark-mode">
 <div id="loginScreen" class="login-screen">
@@ -113,6 +114,9 @@
             <button class="sidebar-btn" data-panel="odds-history" onclick="app.showPanel('odds-history')"><span class="sidebar-icon">📋</span> История коэффициентов</button>
             <button class="sidebar-btn" data-panel="realtime" onclick="app.showPanel('realtime')">
                 <span class="sidebar-icon">📡</span> Realtime Monitor
+            </button>
+            <button class="sidebar-btn" data-panel="mappings" onclick="app.showPanel('mappings')">
+                <span class="sidebar-icon">🔗</span> Маппинги данных
             </button>
         </div>
         <div class="sidebar-section">
@@ -771,6 +775,9 @@
                 </div>
             </div>
         </div>
+        <div class="panel" id="panel-mappings">
+            <div id="mappings-panel-root"></div>
+        </div>
 
         <!-- ETL SECTION — Real Data Loader -->
         <div style="margin-top:24px;padding:20px;background:var(--bg2);border-radius:12px;border:1px solid var(--border)">
@@ -1082,6 +1089,7 @@
 <script src="js/panel-fix.js"></script>
 
 <script src="/js/realtime-panel.js"></script>
+<script src="/js/mappings.js"></script>
 
 </body>
 </html>

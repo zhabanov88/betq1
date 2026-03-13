@@ -1,0 +1,204 @@
+/* ════════════════════════════════════════════════════════════════════════
+   BetQuant — Library & Mapping UI Styles
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Вкладки библиотеки ─────────────────────────────────────────────────── */
+.lib-tab {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 13px;
+    transition: .15s;
+  }
+  .lib-tab:hover { background: var(--bg3); color: var(--text1); }
+  .lib-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  
+  /* ── Карточка стратегии ─────────────────────────────────────────────────── */
+  .library-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .1s;
+  }
+  .library-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 2px 12px rgba(99,102,241,.15);
+    transform: translateY(-1px);
+  }
+  .library-card.selected-strategy {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,.25), 0 4px 16px rgba(99,102,241,.2);
+  }
+  
+  .library-card-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .library-card-desc {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  .library-card-stats {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    margin: 6px 0;
+  }
+  .library-card-tag {
+    display: inline-block;
+    background: var(--bg3);
+    color: var(--text3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    margin: 2px 2px 0 0;
+  }
+  .library-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  
+  /* ── Чип статистики стратегии ───────────────────────────────────────────── */
+  .lib-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(99,102,241,.12);
+    color: #818cf8;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  
+  /* ── Панель сигналов ────────────────────────────────────────────────────── */
+  .lib-signal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .signal-card {
+    transition: box-shadow .15s;
+  }
+  .signal-card:hover {
+    box-shadow: 0 0 0 1px rgba(16,185,129,.5);
+  }
+  
+  /* ── Строка матча в панели сигналов ─────────────────────────────────────── */
+  .match-row:hover {
+    background: var(--bg4, var(--bg3)) !important;
+  }
+  
+  /* ── Маппинг-таблицы ────────────────────────────────────────────────────── */
+  .mapping-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .mapping-table th {
+    text-align: left;
+    padding: 8px 10px;
+    color: var(--text3);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .mapping-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .mapping-table tr:hover td { background: var(--bg3); }
+  
+  /* ── Бейдж источника данных ─────────────────────────────────────────────── */
+  .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .source-badge.realtime {
+    background: rgba(239,68,68,.15);
+    color: #f87171;
+  }
+  .source-badge.historical {
+    background: rgba(99,102,241,.15);
+    color: #818cf8;
+  }
+  
+  /* ── Индикатор маппинга ─────────────────────────────────────────────────── */
+  .mapping-confidence {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+  .mapping-confidence.high { background: var(--green); }
+  .mapping-confidence.medium { background: var(--yellow, #f59e0b); }
+  .mapping-confidence.low { background: var(--red); }
+  
+  /* ── Панель маппингов ───────────────────────────────────────────────────── */
+  #panel-mappings .mappings-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    padding: 0 20px;
+    height: calc(100vh - 200px);
+  }
+  .mappings-sidebar {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-y: auto;
+  }
+  .mappings-sidebar-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    transition: background .1s;
+  }
+  .mappings-sidebar-item:hover { background: var(--bg3); }
+  .mappings-sidebar-item.active { background: rgba(99,102,241,.15); color: var(--accent); font-weight: 600; }
+  
+  /* ── Strategy Grid ───────────────────────────────────────────────────────── */
+  .strategy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 14px;
+  }
+  @media (max-width: 900px) {
+    .strategy-grid { grid-template-columns: 1fr; }
+    #lib-signal-panel { display: none !important; }
+  }
