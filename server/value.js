@@ -217,8 +217,8 @@ router.get('/scan', async (req, res) => {
           SELECT home_team, away_team, any(league_code) AS league_code,
                  avg(home_goals) AS avg_hg, avg(away_goals) AS avg_ag,
                  count() AS n,
-                 avg(odds_home) AS bH, avg(odds_draw) AS bD,
-                 avg(odds_away) AS bA, avg(odds_over25) AS bO
+                 avg(b365_home) AS bH, avg(b365_draw) AS bD,
+                 avg(b365_away) AS bA, avg(b365_over) AS bO
           FROM betquant.football_matches
           WHERE date >= today()-365 ${leagues}
           GROUP BY home_team, away_team HAVING n >= 3

@@ -290,8 +290,16 @@ async function loadMatches(clickhouse, sport, { dateFrom, dateTo, league, season
   if (hasDate && dateTo)   parts.push(`date <= '${dateTo}'`);
   const where = 'WHERE ' + parts.join(' AND ');
 
+  let q = `SELECT * FROM ${table} ${where} ORDER BY date ASC LIMIT ${limit}`
+
+  console.log("q___request")
+  console.log("q___request")
+  console.log("q___request", q)
+  console.log("q___request")
+  console.log("q___request")
+
   const r = await clickhouse.query({
-    query: `SELECT * FROM ${table} ${where} ORDER BY date ASC LIMIT ${limit}`,
+    query: q,
     format: 'JSON',
   });
   const d = await r.json();
@@ -304,7 +312,7 @@ async function loadMatches(clickhouse, sport, { dateFrom, dateTo, league, season
 router.post('/run', async (req, res) => {
   res.setTimeout(120000); // 2 минуты максимум
   const { strategies = [], cfg = {}, parlayRules = [] } = req.body;
-  const clickhouse = req.app.locals.clickhouse;
+  const clickhouse = req.app.locals.clickhouse; 
 
   if (!strategies.length) return res.status(400).json({ error: 'No strategies' });
   if (!clickhouse)        return res.status(503).json({ error: 'ClickHouse not connected' });
@@ -320,7 +328,7 @@ router.post('/run', async (req, res) => {
         dateTo:   cfg.dateTo   || new Date().toISOString().slice(0, 10),
         league:   cfg.league && cfg.league !== 'all' ? cfg.league : null,
         season:   cfg.season || null,
-        limit:    MATCH_LIMIT,
+        limit:    MATCH_LIMIT, 
       });
     }
 
@@ -359,7 +367,7 @@ function runSinglesEngine(evalFns, matchesBySport, cfg) {
         if (!sig?.signal) continue;
         const mk   = String(sig.market || 'home').toLowerCase().replace('_win', '');
         const odds = m[`odds_${mk}`] || m.odds_home;
-        if (!odds || odds < (cfg.minOdds || 1.1) || odds > (cfg.maxOdds || 20)) continue;
+        //if (!odds || odds < (cfg.minOdds || 1.1) || odds > (cfg.maxOdds || 20)) continue;
         if (!signalsByDate[m.date]) signalsByDate[m.date] = [];
         signalsByDate[m.date].push({ m, sig, odds, ev });
       }
