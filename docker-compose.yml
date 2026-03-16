@@ -133,6 +133,9 @@ services:
       ETL_SEASONS: "3"
       ETL_LEAGUES: top
       BDL_API_KEY: "83185bbf-4d77-4417-9646-2919c88fa229"
+      FOOTBALLDATA_ORG_TOKEN: "${FOOTBALLDATA_ORG_TOKEN:-}"
+      ETL_XG_SOURCE:          "${ETL_XG_SOURCE:-statsbomb}"
+      PYTHONUNBUFFERED: "1"
     volumes:
       - etl-cache:/opt/etl-cache
     depends_on:

@@ -21,6 +21,7 @@ import json
 import urllib.request
 import argparse
 import time
+import os
 from datetime import datetime
 
 # ── ClickHouse client ─────────────────────────────────────────────────
@@ -218,9 +219,12 @@ def main():
     parser.add_argument('--skip-football',    action='store_true')
     parser.add_argument('--skip-hockey',      action='store_true')
     parser.add_argument('--skip-other',       action='store_true')
+    parser.add_argument('--xg-source',        default='',
+                        help='Источник xG: fbref|statsbomb|both|none (default: из ENV ETL_XG_SOURCE)')
+    parser.add_argument('--fdo-token',        default='',
+                        help='Токен football-data.org (или ENV FOOTBALLDATA_ORG_TOKEN)')
     args = parser.parse_args()
 
-    import os
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     ch_args = [
@@ -253,7 +257,7 @@ def main():
         return
 
     # ── Схема ────────────────────────────────────────────────────────
-    schema_file = os.path.join(script_dir, '..', 'schema', 'clickhouse_extended.sql')
+    schema_file = os.path.join(script_dir, 'schema', 'clickhouse_extended.sql')
     schema_file = os.path.normpath(schema_file)
     if os.path.exists(schema_file):
         apply_schema(ch, schema_file)
@@ -268,18 +272,28 @@ def main():
     results = {}
 
     # ── Футбол ──────────────────────────────────────────────────────
+    # ── Футбол ──────────────────────────────────────────────────────
     if not args.skip_football and not args.hockey_only and not args.other_only:
+        xg_source = args.xg_source or os.environ.get('ETL_XG_SOURCE', 'fbref')
+        fdo_token = args.fdo_token or os.environ.get('FOOTBALLDATA_ORG_TOKEN', '')
+
         football_args = ch_args + ['--seasons', str(args.seasons)]
         if args.quick:
-            football_args += ['--leagues', 'E0,SP1,D1,I1,F1',
-                              '--skip-understat', '--skip-form']
+            football_args += ['--leagues', 'E0,SP1,D1,I1,F1', '--skip-form']
         else:
             football_args += ['--leagues', 'top']
 
+        # Источник xG вместо сломанного Understat
+        football_args += ['--xg-source', xg_source]
+
+        # Токен football-data.org если задан
+        if fdo_token:
+            football_args += ['--fdo-token', fdo_token]
+
         results['football'] = run_script(
-            os.path.join(script_dir, 'scraper_football.py'),
+            os.path.join(script_dir, 'scrapers', 'scraper_football.py'),
             football_args,
-            'ФУТБОЛ — football-data.co.uk + understat.com'
+            f'ФУТБОЛ — football-data.co.uk + OpenLigaDB + football-data.org + xG:{xg_source}'
         )
 
     # ── Хоккей ──────────────────────────────────────────────────────
@@ -289,7 +303,7 @@ def main():
             hockey_args += ['--skip-pbp', '--max-games', '200']
 
         results['hockey'] = run_script(
-            os.path.join(script_dir, 'scraper_hockey.py'),
+            os.path.join(script_dir, 'scrapers', 'scraper_hockey.py'),
             hockey_args,
             'ХОККЕЙ — NHL API + KHL'
         )
@@ -301,7 +315,7 @@ def main():
             other_args += ['--skip-basketball', '--skip-baseball']
 
         results['other'] = run_script(
-            os.path.join(script_dir, 'scraper_other_sports.py'),
+            os.path.join(script_dir, 'scrapers', 'scraper_other_sports.py'),
             other_args,
             'ТЕННИС / БАСКЕТБОЛ / БЕЙСБОЛ'
         )

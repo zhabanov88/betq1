@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """
-BetQuant ETL — Football Scraper
+BetQuant ETL — Football Scraper v2
 Sources:
-  1. football-data.co.uk — 25+ лиг, с 1993 года, результаты + коэффициенты + базовая статистика
-  2. understat.com      — 6 топ-лиг, с 2014, xG + продвинутые метрики + поминутные удары
+  1. football-data.co.uk  — 25+ лиг, 1993–now, результаты + коэффициенты (без ключа)
+  2. OpenLigaDB           — Бундеслига 1/2, без ключа, заменяет Understat для DE
+  3. football-data.org    — топ-6 лиг + CL, нужен бесплатный токен (1 мин регистрация)
+  4. StatsBomb Open Data  — xG для отдельных лиг бесплатно, GitHub
+  5. FBref / soccerdata   — xG для топ-5 лиг, нужен pip install soccerdata
 
 Usage:
-  python3 scraper_football.py --leagues all --seasons 3 --ch-host http://localhost:8123
+  python3 scraper_football.py --leagues top --seasons 3 --ch-host http://localhost:8123
+  python3 scraper_football.py --leagues top --seasons 3 --fdo-token YOUR_TOKEN
 """
 
 import urllib.request
 import urllib.error
+import urllib.parse
 import csv
 import json
 import io
+import os
 import time
 import hashlib
 import argparse
@@ -26,81 +32,66 @@ from collections import defaultdict
 #  КОНФИГУРАЦИЯ
 # ═══════════════════════════════════════════════════════════════════════
 
-# football-data.co.uk — коды лиг
 FOOTBALL_DATA_LEAGUES = {
-    # Англия
-    'E0': {'name': 'Premier League',     'country': 'England', 'tier': 1},
-    'E1': {'name': 'Championship',       'country': 'England', 'tier': 2},
-    'E2': {'name': 'League One',         'country': 'England', 'tier': 3},
-    'E3': {'name': 'League Two',         'country': 'England', 'tier': 4},
-    # Испания
-    'SP1': {'name': 'La Liga',           'country': 'Spain',   'tier': 1},
-    'SP2': {'name': 'La Liga 2',         'country': 'Spain',   'tier': 2},
-    # Германия
-    'D1': {'name': 'Bundesliga',         'country': 'Germany', 'tier': 1},
-    'D2': {'name': '2. Bundesliga',      'country': 'Germany', 'tier': 2},
-    # Италия
-    'I1': {'name': 'Serie A',            'country': 'Italy',   'tier': 1},
-    'I2': {'name': 'Serie B',            'country': 'Italy',   'tier': 2},
-    # Франция
-    'F1': {'name': 'Ligue 1',            'country': 'France',  'tier': 1},
-    'F2': {'name': 'Ligue 2',            'country': 'France',  'tier': 2},
-    # Нидерланды
-    'N1': {'name': 'Eredivisie',         'country': 'Netherlands', 'tier': 1},
-    # Бельгия
-    'B1': {'name': 'First Division A',   'country': 'Belgium', 'tier': 1},
-    # Португалия
-    'P1': {'name': 'Primeira Liga',      'country': 'Portugal','tier': 1},
-    # Турция
-    'T1': {'name': 'Süper Lig',          'country': 'Turkey',  'tier': 1},
-    # Греция
-    'G1': {'name': 'Super League',       'country': 'Greece',  'tier': 1},
-    # Шотландия
-    'SC0': {'name': 'Premiership',       'country': 'Scotland','tier': 1},
-    'SC1': {'name': 'Championship',      'country': 'Scotland','tier': 2},
-    # Другие
-    'ARG': {'name': 'Primera División',  'country': 'Argentina','tier': 1},
-    'BRA': {'name': 'Série A',           'country': 'Brazil',  'tier': 1},
-    'MX':  {'name': 'Liga MX',           'country': 'Mexico',  'tier': 1},
-    'USA': {'name': 'MLS',               'country': 'USA',     'tier': 1},
+    'E0':  {'name': 'Premier League',      'country': 'England',     'tier': 1},
+    'E1':  {'name': 'Championship',        'country': 'England',     'tier': 2},
+    'E2':  {'name': 'League One',          'country': 'England',     'tier': 3},
+    'E3':  {'name': 'League Two',          'country': 'England',     'tier': 4},
+    'SP1': {'name': 'La Liga',             'country': 'Spain',       'tier': 1},
+    'SP2': {'name': 'La Liga 2',           'country': 'Spain',       'tier': 2},
+    'D1':  {'name': 'Bundesliga',          'country': 'Germany',     'tier': 1},
+    'D2':  {'name': '2. Bundesliga',       'country': 'Germany',     'tier': 2},
+    'I1':  {'name': 'Serie A',             'country': 'Italy',       'tier': 1},
+    'I2':  {'name': 'Serie B',             'country': 'Italy',       'tier': 2},
+    'F1':  {'name': 'Ligue 1',             'country': 'France',      'tier': 1},
+    'F2':  {'name': 'Ligue 2',             'country': 'France',      'tier': 2},
+    'N1':  {'name': 'Eredivisie',          'country': 'Netherlands', 'tier': 1},
+    'B1':  {'name': 'First Division A',    'country': 'Belgium',     'tier': 1},
+    'P1':  {'name': 'Primeira Liga',       'country': 'Portugal',    'tier': 1},
+    'T1':  {'name': 'Süper Lig',           'country': 'Turkey',      'tier': 1},
+    'G1':  {'name': 'Super League',        'country': 'Greece',      'tier': 1},
+    'SC0': {'name': 'Premiership',         'country': 'Scotland',    'tier': 1},
+    'SC1': {'name': 'Championship',        'country': 'Scotland',    'tier': 2},
+    'ARG': {'name': 'Primera División',    'country': 'Argentina',   'tier': 1},
+    'BRA': {'name': 'Série A',             'country': 'Brazil',      'tier': 1},
+    'MX':  {'name': 'Liga MX',             'country': 'Mexico',      'tier': 1},
+    'USA': {'name': 'MLS',                 'country': 'USA',         'tier': 1},
 }
 
-# understat — только 6 лиг
-UNDERSTAT_LEAGUES = {
-    'EPL':        {'fd_code': 'E0',  'name': 'Premier League'},
-    'La_liga':    {'fd_code': 'SP1', 'name': 'La Liga'},
-    'Bundesliga': {'fd_code': 'D1',  'name': 'Bundesliga'},
-    'Serie_A':    {'fd_code': 'I1',  'name': 'Serie A'},
-    'Ligue_1':    {'fd_code': 'F1',  'name': 'Ligue 1'},
-    'RFPL':       {'fd_code': 'R1',  'name': 'Russian Premier League'},
-}
-
-# Сезоны football-data.co.uk
+# Сезоны football-data.co.uk (формат '2425')
 def make_seasons(n_back=5):
-    """Возвращает список сезонов вида ['2425','2324','2223',...]"""
     today = date.today()
     year = today.year
     seasons = []
     for i in range(n_back):
         y = year - i
-        # сезон 2024-25 → '2425'
-        s = f"{str(y)[-2:]}{str(y+1)[-2:]}"
-        seasons.append(s)
-        # также прошлый сезон
+        s  = f"{str(y)[-2:]}{str(y+1)[-2:]}"
         s2 = f"{str(y-1)[-2:]}{str(y)[-2:]}"
-        if s2 not in seasons:
-            seasons.append(s2)
-    return sorted(set(seasons), reverse=True)[:n_back*2]
+        if s  not in seasons: seasons.append(s)
+        if s2 not in seasons: seasons.append(s2)
+    return sorted(set(seasons), reverse=True)[:n_back * 2]
+
+# Год начала текущего сезона (август → новый сезон)
+def current_season_start():
+    today = date.today()
+    return today.year if today.month >= 8 else today.year - 1
 
 # ═══════════════════════════════════════════════════════════════════════
 #  HTTP helpers
 # ═══════════════════════════════════════════════════════════════════════
 
-def fetch_url(url, timeout=30, retries=3):
+def fetch_url(url, timeout=30, retries=3, extra_headers=None):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (BetQuant-ETL/1.0; research purposes)',
-        'Accept': 'text/html,application/xhtml+xml,text/csv,*/*',
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/120.0.0.0 Safari/537.36'
+        ),
+        'Accept': 'text/html,application/xhtml+xml,text/csv,application/json,*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
     }
+    if extra_headers:
+        headers.update(extra_headers)
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers=headers)
@@ -108,7 +99,12 @@ def fetch_url(url, timeout=30, retries=3):
                 return resp.read()
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                return None  # файл не существует
+                return None
+            if e.code == 429:
+                wait = 60 * (attempt + 1)
+                print(f"    ⚠ Rate limit 429, ждём {wait}с...")
+                time.sleep(wait)
+                continue
             if attempt == retries - 1:
                 raise
             time.sleep(2 ** attempt)
@@ -125,21 +121,18 @@ def fetch_url(url, timeout=30, retries=3):
 class ClickHouseClient:
     def __init__(self, host='http://localhost:8123', database='betquant',
                  user='default', password=''):
-        self.host = host.rstrip('/')
+        self.host     = host.rstrip('/')
         self.database = database
-        self.user = user
+        self.user     = user
         self.password = password
 
-    def query(self, sql, data=None):
-        url = f"{self.host}/?database={self.database}&user={self.user}"
+    def query(self, sql):
+        url  = f"{self.host}/?database={self.database}&user={self.user}"
         if self.password:
             url += f"&password={self.password}"
-        body = sql.encode('utf-8') if data is None else data
-        req = urllib.request.Request(
-            url,
-            data=body if data is None else (sql.encode() + b'\n' + data),
-            headers={'Content-Type': 'application/octet-stream'}
-        )
+        body = sql.encode('utf-8')
+        req  = urllib.request.Request(url, data=body,
+                                      headers={'Content-Type': 'application/octet-stream'})
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 return resp.read().decode('utf-8')
@@ -148,12 +141,11 @@ class ClickHouseClient:
             raise RuntimeError(f"ClickHouse error: {err[:500]}")
 
     def insert_json_batch(self, table, rows):
-        """Вставляет список словарей через JSONEachRow"""
         if not rows:
             return 0
         lines = '\n'.join(json.dumps(r, ensure_ascii=False, default=str) for r in rows)
-        sql = f"INSERT INTO {self.database}.{table} FORMAT JSONEachRow\n"
-        self.query(sql, (sql + lines).encode('utf-8'))
+        sql   = f"INSERT INTO {self.database}.{table} FORMAT JSONEachRow\n{lines}"
+        self.query(sql)
         return len(rows)
 
     def execute(self, sql):
@@ -165,47 +157,14 @@ class ClickHouseClient:
         return int(r.strip())
 
     def log(self, sport, source, league, season, rows, status, msg=''):
-        row = {
-            'sport': sport, 'source': source, 'league': league,
-            'season': season, 'rows_loaded': rows, 'status': status, 'message': msg[:500]
-        }
+        row = {'sport': sport, 'source': source, 'league': league,
+               'season': season, 'rows_loaded': rows, 'status': status,
+               'message': msg[:500]}
         self.insert_json_batch('etl_log', [row])
 
 # ═══════════════════════════════════════════════════════════════════════
-#  football-data.co.uk parser
+#  Helpers
 # ═══════════════════════════════════════════════════════════════════════
-
-# Маппинг колонок football-data.co.uk → наши поля
-FD_COL_MAP = {
-    'Date': 'date', 'Time': 'time',
-    'HomeTeam': 'home_team', 'AwayTeam': 'away_team',
-    'FTHG': 'home_goals', 'FTAG': 'away_goals', 'FTR': 'result',
-    'HTHG': 'ht_home_goals', 'HTAG': 'ht_away_goals',
-    'HS': 'home_shots', 'AS': 'away_shots',
-    'HST': 'home_shots_on_target', 'AST': 'away_shots_on_target',
-    'HC': 'home_corners', 'AC': 'away_corners',
-    'HF': 'home_fouls', 'AF': 'away_fouls',
-    'HY': 'home_yellow', 'AY': 'away_yellow',
-    'HR': 'home_red', 'AR': 'away_red',
-    # Коэффициенты
-    'B365H': 'b365_home', 'B365D': 'b365_draw', 'B365A': 'b365_away',
-    'B365>2.5': 'b365_over', 'B365<2.5': 'b365_under',
-    'PSH': 'pinnacle_home', 'PSD': 'pinnacle_draw', 'PSA': 'pinnacle_away',
-    'BbMxH': 'max_home', 'BbMxD': 'max_draw', 'BbMxA': 'max_away',
-    'BbAvH': 'avg_home', 'BbAvD': 'avg_draw', 'BbAvA': 'avg_away',
-    'BbAH': 'ah_line', 'BbAHH': 'ah_home', 'BbAHA': 'ah_away',
-}
-
-def parse_fd_date(s):
-    """'20/08/2023' или '20/08/23' → 'YYYY-MM-DD'"""
-    if not s:
-        return None
-    for fmt in ['%d/%m/%Y', '%d/%m/%y']:
-        try:
-            return datetime.strptime(s.strip(), fmt).strftime('%Y-%m-%d')
-        except ValueError:
-            pass
-    return None
 
 def safe_float(v, default=0.0):
     try:
@@ -224,29 +183,42 @@ def make_match_id(date_str, home, away, league):
     key = f"{date_str}|{home}|{away}|{league}"
     return hashlib.md5(key.encode()).hexdigest()[:16]
 
+def parse_fd_date(s):
+    if not s:
+        return None
+    for fmt in ['%d/%m/%Y', '%d/%m/%y']:
+        try:
+            return datetime.strptime(s.strip(), fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+    return None
+
+# ═══════════════════════════════════════════════════════════════════════
+#  SOURCE 1: football-data.co.uk
+# ═══════════════════════════════════════════════════════════════════════
+
 def parse_fd_csv(content_bytes, league_code, season):
-    """Парсит CSV от football-data.co.uk, возвращает список dict для CH"""
     meta = FOOTBALL_DATA_LEAGUES.get(league_code, {'name': league_code, 'country': ''})
     rows = []
-
     try:
-        text = content_bytes.decode('latin-1')
+        text   = content_bytes.decode('latin-1')
         reader = csv.DictReader(io.StringIO(text))
     except Exception as e:
         print(f"    CSV decode error: {e}")
         return rows
 
     for raw in reader:
-        # Пропускаем строки без команд
-        home = raw.get('HomeTeam', '').strip()
-        away = raw.get('AwayTeam', '').strip()
+        home     = raw.get('HomeTeam', '').strip()
+        away     = raw.get('AwayTeam', '').strip()
         if not home or not away:
             continue
-
         date_str = parse_fd_date(raw.get('Date', ''))
         if not date_str:
             continue
 
+        hg  = safe_int(raw.get('FTHG', raw.get('HG', 0)))
+        ag  = safe_int(raw.get('FTAG', raw.get('AG', 0)))
+        ftr = raw.get('FTR', raw.get('Res', '')).strip()
         row = {
             'match_id':    make_match_id(date_str, home, away, league_code),
             'source':      'football-data.co.uk',
@@ -257,64 +229,49 @@ def parse_fd_csv(content_bytes, league_code, season):
             'country':     meta['country'],
             'home_team':   home,
             'away_team':   away,
+            'home_goals':           hg,
+            'away_goals':           ag,
+            'ht_home_goals':        safe_int(raw.get('HTHG', 0)),
+            'ht_away_goals':        safe_int(raw.get('HTAG', 0)),
+            'result':               ftr if ftr in ('H', 'D', 'A') else ('H' if hg > ag else ('A' if ag > hg else 'D')),
+            'home_shots':           safe_int(raw.get('HS', 0)),
+            'away_shots':           safe_int(raw.get('AS', 0)),
+            'home_shots_on_target': safe_int(raw.get('HST', 0)),
+            'away_shots_on_target': safe_int(raw.get('AST', 0)),
+            'home_corners':         safe_int(raw.get('HC', 0)),
+            'away_corners':         safe_int(raw.get('AC', 0)),
+            'home_fouls':           safe_int(raw.get('HF', 0)),
+            'away_fouls':           safe_int(raw.get('AF', 0)),
+            'home_yellow':          safe_int(raw.get('HY', 0)),
+            'away_yellow':          safe_int(raw.get('AY', 0)),
+            'home_red':             safe_int(raw.get('HR', 0)),
+            'away_red':             safe_int(raw.get('AR', 0)),
+            'b365_home':  safe_float(raw.get('B365H', 0)),
+            'b365_draw':  safe_float(raw.get('B365D', 0)),
+            'b365_away':  safe_float(raw.get('B365A', 0)),
+            'b365_over':  safe_float(raw.get('B365>2.5', raw.get('B365AH', 0))),
+            'b365_under': safe_float(raw.get('B365<2.5', 0)),
+            'pinnacle_home': safe_float(raw.get('PSH', raw.get('PH', 0))),
+            'pinnacle_draw': safe_float(raw.get('PSD', raw.get('PD', 0))),
+            'pinnacle_away': safe_float(raw.get('PSA', raw.get('PA', 0))),
+            'max_home': safe_float(raw.get('BbMxH', raw.get('MaxH', 0))),
+            'max_draw': safe_float(raw.get('BbMxD', raw.get('MaxD', 0))),
+            'max_away': safe_float(raw.get('BbMxA', raw.get('MaxA', 0))),
+            'avg_home': safe_float(raw.get('BbAvH', raw.get('AvgH', 0))),
+            'avg_draw': safe_float(raw.get('BbAvD', raw.get('AvgD', 0))),
+            'avg_away': safe_float(raw.get('BbAvA', raw.get('AvgA', 0))),
+            'ah_line':  safe_float(raw.get('BbAH', 0)),
+            'ah_home':  safe_float(raw.get('BbAHH', 0)),
+            'ah_away':  safe_float(raw.get('BbAHA', 0)),
+            'home_xg': 0.0, 'away_xg': 0.0,
+            'home_xga': 0.0, 'away_xga': 0.0,
         }
-
-        # Результат
-        row['home_goals']    = safe_int(raw.get('FTHG', raw.get('HG', 0)))
-        row['away_goals']    = safe_int(raw.get('FTAG', raw.get('AG', 0)))
-        row['ht_home_goals'] = safe_int(raw.get('HTHG', 0))
-        row['ht_away_goals'] = safe_int(raw.get('HTAG', 0))
-        ftr = raw.get('FTR', raw.get('Res', '')).strip()
-        row['result'] = ftr if ftr in ('H', 'D', 'A') else 'H'
-
-        # Статистика матча
-        row['home_shots']           = safe_int(raw.get('HS', 0))
-        row['away_shots']           = safe_int(raw.get('AS', 0))
-        row['home_shots_on_target'] = safe_int(raw.get('HST', 0))
-        row['away_shots_on_target'] = safe_int(raw.get('AST', 0))
-        row['home_corners']         = safe_int(raw.get('HC', 0))
-        row['away_corners']         = safe_int(raw.get('AC', 0))
-        row['home_fouls']           = safe_int(raw.get('HF', 0))
-        row['away_fouls']           = safe_int(raw.get('AF', 0))
-        row['home_yellow']          = safe_int(raw.get('HY', 0))
-        row['away_yellow']          = safe_int(raw.get('AY', 0))
-        row['home_red']             = safe_int(raw.get('HR', 0))
-        row['away_red']             = safe_int(raw.get('AR', 0))
-
-        # Коэффициенты
-        row['b365_home'] = safe_float(raw.get('B365H', 0))
-        row['b365_draw'] = safe_float(raw.get('B365D', 0))
-        row['b365_away'] = safe_float(raw.get('B365A', 0))
-        row['b365_over'] = safe_float(raw.get('B365>2.5', raw.get('B365AH', 0)))
-        row['b365_under']= safe_float(raw.get('B365<2.5', 0))
-        row['pinnacle_home'] = safe_float(raw.get('PSH', raw.get('PH', 0)))
-        row['pinnacle_draw'] = safe_float(raw.get('PSD', raw.get('PD', 0)))
-        row['pinnacle_away'] = safe_float(raw.get('PSA', raw.get('PA', 0)))
-        row['max_home'] = safe_float(raw.get('BbMxH', raw.get('MaxH', 0)))
-        row['max_draw'] = safe_float(raw.get('BbMxD', raw.get('MaxD', 0)))
-        row['max_away'] = safe_float(raw.get('BbMxA', raw.get('MaxA', 0)))
-        row['avg_home'] = safe_float(raw.get('BbAvH', raw.get('AvgH', 0)))
-        row['avg_draw'] = safe_float(raw.get('BbAvD', raw.get('AvgD', 0)))
-        row['avg_away'] = safe_float(raw.get('BbAvA', raw.get('AvgA', 0)))
-        row['ah_line']  = safe_float(raw.get('BbAH', 0))
-        row['ah_home']  = safe_float(raw.get('BbAHH', 0))
-        row['ah_away']  = safe_float(raw.get('BbAHA', 0))
-
-        # Defaults для xG (заполним из understat)
-        row['home_xg']  = 0.0
-        row['away_xg']  = 0.0
-        row['home_xga'] = 0.0
-        row['away_xga'] = 0.0
-
         rows.append(row)
-
     return rows
 
 def scrape_football_data(ch, leagues, seasons, batch_size=500):
-    """Скачивает данные с football-data.co.uk"""
     total = 0
-    base = 'https://www.football-data.co.uk/mmz4281'
-
+    base  = 'https://www.football-data.co.uk/mmz4281'
     for season in seasons:
         for league_code in leagues:
             url = f"{base}/{season}/{league_code}.csv"
@@ -323,221 +280,474 @@ def scrape_football_data(ch, leagues, seasons, batch_size=500):
                 content = fetch_url(url, timeout=20)
                 if content is None:
                     print(f"    ✗ 404 skip")
-                    ch.log('football', 'football-data.co.uk', league_code, season, 0, 'skip', '404')
                     continue
                 if len(content) < 100:
                     print(f"    ✗ empty")
                     continue
-
                 rows = parse_fd_csv(content, league_code, season)
                 if not rows:
                     print(f"    ✗ parsed 0 rows")
                     continue
-
-                # Вставляем батчами
                 for i in range(0, len(rows), batch_size):
                     ch.insert_json_batch('football_matches', rows[i:i+batch_size])
-
                 ch.log('football', 'football-data.co.uk', league_code, season, len(rows), 'ok')
-                print(f"    ✓ {len(rows)} матчей загружено")
+                print(f"    ✓ {len(rows)} матчей")
                 total += len(rows)
-                time.sleep(0.5)  # уважаем сервер
-
+                time.sleep(0.5)
             except Exception as e:
                 print(f"    ✗ ERROR: {e}")
                 ch.log('football', 'football-data.co.uk', league_code, season, 0, 'error', str(e)[:200])
+    return total
+
+# ═══════════════════════════════════════════════════════════════════════
+#  SOURCE 2: OpenLigaDB — Бундеслига, бесплатно, без ключа
+#  API: https://api.openligadb.de
+# ═══════════════════════════════════════════════════════════════════════
+
+OPENLIGA_LEAGUES = {
+    'D1':  'bl1',
+    'D2':  'bl2',
+}
+
+def scrape_openligadb(ch, seasons_back=3, batch_size=300):
+    """Бундеслига 1 и 2 через OpenLigaDB. Без ключа, работает стабильно."""
+    total = 0
+    cur   = current_season_start()
+
+    for league_key, liga_short in OPENLIGA_LEAGUES.items():
+        meta = FOOTBALL_DATA_LEAGUES.get(league_key, {'name': league_key, 'country': 'Germany'})
+        for i in range(seasons_back):
+            season_year = cur - i
+            url = f"https://api.openligadb.de/getmatchdata/{liga_short}/{season_year}"
+            print(f"  [openliga] {league_key} {season_year} → {url}")
+            try:
+                content = fetch_url(url, timeout=20)
+                if not content:
+                    print(f"    ✗ пустой ответ")
+                    continue
+                matches_raw = json.loads(content.decode('utf-8'))
+                if not matches_raw:
+                    print(f"    ✗ 0 матчей")
+                    continue
+
+                season_str = f"{season_year}-{str(season_year+1)[-2:]}"
+                rows = []
+                for m in matches_raw:
+                    if not m.get('matchIsFinished'):
+                        continue
+                    dt_raw = m.get('matchDateTimeUTC', '') or m.get('matchDateTime', '')
+                    dt_str = dt_raw[:10] if dt_raw else ''
+                    if not dt_str:
+                        continue
+                    t1   = m.get('team1', {})
+                    t2   = m.get('team2', {})
+                    home = t1.get('teamName', '')
+                    away = t2.get('teamName', '')
+                    if not home or not away:
+                        continue
+                    results = m.get('matchResults', [])
+                    final   = next((r for r in results if r.get('resultTypeID') == 2), None)
+                    ht_res  = next((r for r in results if r.get('resultTypeID') == 1), None)
+                    if not final and results:
+                        final = results[-1]
+                    if not final:
+                        continue
+                    hg = safe_int(final.get('pointsTeam1', 0))
+                    ag = safe_int(final.get('pointsTeam2', 0))
+                    rows.append({
+                        'match_id':      str(m.get('matchID', make_match_id(dt_str, home, away, league_key))),
+                        'source':        'openligadb',
+                        'date':          dt_str,
+                        'season':        season_str,
+                        'league_code':   league_key,
+                        'league_name':   meta['name'],
+                        'country':       meta.get('country', 'Germany'),
+                        'home_team':     home,
+                        'away_team':     away,
+                        'home_goals':    hg,
+                        'away_goals':    ag,
+                        'ht_home_goals': safe_int(ht_res.get('pointsTeam1', 0)) if ht_res else 0,
+                        'ht_away_goals': safe_int(ht_res.get('pointsTeam2', 0)) if ht_res else 0,
+                        'result':        'H' if hg > ag else ('A' if ag > hg else 'D'),
+                        'home_xg': 0.0, 'away_xg': 0.0, 'home_xga': 0.0, 'away_xga': 0.0,
+                    })
+
+                if rows:
+                    for j in range(0, len(rows), batch_size):
+                        ch.insert_json_batch('football_matches', rows[j:j+batch_size])
+                    ch.log('football', 'openligadb', league_key, season_str, len(rows), 'ok')
+                    print(f"    ✓ {len(rows)} матчей")
+                    total += len(rows)
+                else:
+                    print(f"    ✗ 0 завершённых матчей")
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"    ✗ ERROR: {e}")
+    return total
+
+# ═══════════════════════════════════════════════════════════════════════
+#  SOURCE 3: football-data.org API
+#  Регистрация (1 мин): https://www.football-data.org/client/register
+#  Бесплатно: EPL, La Liga, Bundesliga, Serie A, Ligue 1, CL, + ещё 6
+#  Лимит: 10 запросов/минуту
+# ═══════════════════════════════════════════════════════════════════════
+
+FDO_COMPETITIONS = {
+    'E0':  'PL',    # Premier League
+    'SP1': 'PD',    # La Liga
+    'D1':  'BL1',   # Bundesliga
+    'I1':  'SA',    # Serie A
+    'F1':  'FL1',   # Ligue 1
+    'N1':  'DED',   # Eredivisie
+    'P1':  'PPL',   # Primeira Liga
+    'CL':  'CL',    # Champions League
+}
+
+def scrape_footballdata_org(ch, api_token, seasons_back=3, batch_size=300):
+    """
+    football-data.org API.
+    Токен: https://www.football-data.org/client/register (бесплатно)
+    Добавьте в .env: FOOTBALLDATA_ORG_TOKEN=ваш_токен
+    """
+    if not api_token:
+        print("  [football-data.org] Токен не задан — пропускаем")
+        print("  → Получите БЕСПЛАТНО: https://www.football-data.org/client/register")
+        print("  → Добавьте в .env: FOOTBALLDATA_ORG_TOKEN=ваш_токен")
+        return 0
+
+    total = 0
+    cur   = current_season_start()
+
+    for league_key, comp_code in FDO_COMPETITIONS.items():
+        meta = FOOTBALL_DATA_LEAGUES.get(league_key, {'name': comp_code, 'country': ''})
+        for i in range(seasons_back):
+            season_year = cur - i
+            url = (f"https://api.football-data.org/v4/competitions/{comp_code}/matches"
+                   f"?season={season_year}&status=FINISHED")
+            print(f"  [football-data.org] {league_key} {season_year} ({comp_code})")
+            try:
+                content = fetch_url(url, timeout=20,
+                                    extra_headers={'X-Auth-Token': api_token})
+                if not content:
+                    print(f"    ✗ пустой ответ")
+                    continue
+                data       = json.loads(content.decode('utf-8'))
+                matches_raw = data.get('matches', [])
+                if not matches_raw:
+                    print(f"    ✗ 0 матчей")
+                    continue
+
+                season_str = f"{season_year}-{str(season_year+1)[-2:]}"
+                rows = []
+                for m in matches_raw:
+                    if m.get('status') != 'FINISHED':
+                        continue
+                    dt_str = (m.get('utcDate', '') or '')[:10]
+                    if not dt_str:
+                        continue
+                    home = (m.get('homeTeam', {}).get('shortName')
+                            or m.get('homeTeam', {}).get('name', ''))
+                    away = (m.get('awayTeam', {}).get('shortName')
+                            or m.get('awayTeam', {}).get('name', ''))
+                    score = m.get('score', {})
+                    ft    = score.get('fullTime', {})
+                    ht_s  = score.get('halfTime', {})
+                    hg    = safe_int(ft.get('home', 0))
+                    ag    = safe_int(ft.get('away', 0))
+                    rows.append({
+                        'match_id':      str(m.get('id', make_match_id(dt_str, home, away, league_key))),
+                        'source':        'football-data.org',
+                        'date':          dt_str,
+                        'season':        season_str,
+                        'league_code':   league_key,
+                        'league_name':   meta['name'],
+                        'country':       meta.get('country', ''),
+                        'home_team':     home,
+                        'away_team':     away,
+                        'home_goals':    hg,
+                        'away_goals':    ag,
+                        'ht_home_goals': safe_int(ht_s.get('home', 0)),
+                        'ht_away_goals': safe_int(ht_s.get('away', 0)),
+                        'result':        'H' if hg > ag else ('A' if ag > hg else 'D'),
+                        'home_xg': 0.0, 'away_xg': 0.0, 'home_xga': 0.0, 'away_xga': 0.0,
+                    })
+
+                if rows:
+                    for j in range(0, len(rows), batch_size):
+                        ch.insert_json_batch('football_matches', rows[j:j+batch_size])
+                    ch.log('football', 'football-data.org', league_key, season_str, len(rows), 'ok')
+                    print(f"    ✓ {len(rows)} матчей")
+                    total += len(rows)
+
+                time.sleep(7)  # 10 req/min → 6+ сек между запросами
+
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    print(f"    ⚠ Rate limit, ждём 65 сек...")
+                    time.sleep(65)
+                else:
+                    print(f"    ✗ HTTP {e.code}: {e.read().decode()[:100]}")
+            except Exception as e:
+                print(f"    ✗ ERROR: {e}")
 
     return total
 
 # ═══════════════════════════════════════════════════════════════════════
-#  Understat scraper — xG + события матча
+#  SOURCE 4: StatsBomb Open Data — xG бесплатно, GitHub
+#  Репозиторий: https://github.com/statsbomb/open-data
+#  Лиги: La Liga (обширно), NWSL, WSL, FA Women's Super League и др.
+#  Данные: xG, xA, shot position, pass map, линейки давления
 # ═══════════════════════════════════════════════════════════════════════
 
-def extract_json_from_script(html, var_name):
-    """Извлекает JSON из <script> understat страницы"""
-    pattern = rf"var {var_name}\s*=\s*JSON\.parse\('(.+?)'\)"
-    m = re.search(pattern, html, re.DOTALL)
-    if not m:
-        return None
-    raw = m.group(1)
-    # unescape
-    raw = raw.replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+SB_BASE = 'https://raw.githubusercontent.com/statsbomb/open-data/master/data'
+
+# Маппинг StatsBomb competition_id → наш league_code
+SB_COMPETITIONS = {
+    11:  'SP1',   # La Liga
+    2:   'CL',    # Champions League
+    37:  'E2',    # FA Women's Championship (пример)
+    49:  'E0',    # FA Women's Super League → используем как E0 proxy
+    72:  'USA',   # NWSL
+}
+
+def fetch_sb_json(path):
+    url = f"{SB_BASE}/{path}"
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        # Попробуем другой паттерн
-        try:
-            raw2 = bytes(raw, 'utf-8').decode('unicode_escape')
-            return json.loads(raw2)
-        except Exception:
+        content = fetch_url(url, timeout=20)
+        if not content:
             return None
+        return json.loads(content.decode('utf-8'))
+    except Exception:
+        return None
+
+def scrape_statsbomb_open(ch, seasons_back=3, batch_size=200):
+    """
+    StatsBomb Open Data с GitHub — содержит xG, xA, shot maps.
+    Бесплатно, без ключа, ~3000 матчей по топ-лигам.
+    """
+    print("  [statsbomb] Загружаем список соревнований...")
+    competitions = fetch_sb_json('competitions.json')
+    if not competitions:
+        print("  ✗ GitHub недоступен или competitions.json не найден")
+        return 0
+
+    cur   = current_season_start()
+    total = 0
+
+    # Фильтруем нужные соревнования
+    target_comp_ids = set(SB_COMPETITIONS.keys())
+    relevant = [c for c in competitions if c.get('competition_id') in target_comp_ids]
+    print(f"  [statsbomb] Найдено {len(relevant)} подходящих сезонов")
+
+    for comp in relevant:
+        comp_id   = comp['competition_id']
+        season_id = comp['season_id']
+        season_name = comp.get('season_name', '')
+        league_code = SB_COMPETITIONS.get(comp_id, 'XX')
+        meta        = FOOTBALL_DATA_LEAGUES.get(league_code, {'name': comp.get('competition_name',''), 'country': ''})
+
+        # Пропускаем слишком старые сезоны
+        # StatsBomb сезоны: "2023/2024" или "2023"
+        try:
+            year_str = season_name.split('/')[0].strip()
+            year = int(year_str)
+            if year < cur - seasons_back:
+                continue
+        except Exception:
+            pass
+
+        print(f"  [statsbomb] {league_code} season={season_name} (comp={comp_id}, s={season_id})")
+        time.sleep(0.3)
+
+        # Список матчей сезона
+        matches_data = fetch_sb_json(f"matches/{comp_id}/{season_id}.json")
+        if not matches_data:
+            print(f"    ✗ матчи не найдены")
+            continue
+
+        rows        = []
+        event_rows  = []
+        season_str  = season_name.replace('/', '-')[:7]  # '2023-24'
+
+        for m in matches_data:
+            match_id  = str(m.get('match_id', ''))
+            dt_str    = (m.get('match_date', '') or '')[:10]
+            if not dt_str:
+                continue
+            home = m.get('home_team', {}).get('home_team_name', '')
+            away = m.get('away_team', {}).get('away_team_name', '')
+            if not home or not away:
+                continue
+            hg = safe_int(m.get('home_score', 0))
+            ag = safe_int(m.get('away_score', 0))
+
+            # xG из shot_freeze_frames если есть
+            home_xg = safe_float(m.get('metadata', {}).get('home_xg', 0))
+            away_xg = safe_float(m.get('metadata', {}).get('away_xg', 0))
+
+            rows.append({
+                'match_id':    match_id or make_match_id(dt_str, home, away, league_code),
+                'source':      'statsbomb',
+                'date':        dt_str,
+                'season':      season_str,
+                'league_code': league_code,
+                'league_name': meta.get('name', ''),
+                'country':     meta.get('country', ''),
+                'home_team':   home,
+                'away_team':   away,
+                'home_goals':  hg,
+                'away_goals':  ag,
+                'result':      'H' if hg > ag else ('A' if ag > hg else 'D'),
+                'home_xg':     home_xg,
+                'away_xg':     away_xg,
+                'home_xga':    away_xg,
+                'away_xga':    home_xg,
+                'ht_home_goals': 0, 'ht_away_goals': 0,
+            })
+
+        if rows:
+            for j in range(0, len(rows), batch_size):
+                ch.insert_json_batch('football_matches', rows[j:j+batch_size])
+            ch.log('football', 'statsbomb', league_code, season_str, len(rows), 'ok')
+            print(f"    ✓ {len(rows)} матчей")
+            total += len(rows)
+        else:
+            print(f"    ✗ 0 матчей")
+
+    return total
+
+# ═══════════════════════════════════════════════════════════════════════
+#  SOURCE 5: FBref через soccerdata — xG для топ-5 лиг
+#  pip install soccerdata lxml html5lib
+#  Источник: https://fbref.com (данные от StatsBomb/Opta)
+#  Даёт: xG, npxG, xA, progressive passes, pressures и многое другое
+# ═══════════════════════════════════════════════════════════════════════
+
+FBREF_LEAGUES = {
+    'ENG-Premier League': 'E0',
+    'ESP-La Liga':        'SP1',
+    'GER-Bundesliga':     'D1',
+    'ITA-Serie A':        'I1',
+    'FRA-Ligue 1':        'F1',
+}
+
+def scrape_fbref_xg(ch, seasons_back=3, batch_size=300):
+    """
+    xG данные с FBref через библиотеку soccerdata.
+    Установка: pip install soccerdata lxml html5lib
+    Документация: https://soccerdata.readthedocs.io
+    """
+    try:
+        import soccerdata as sd
+    except ImportError:
+        print("  [fbref] soccerdata не установлен")
+        print("  → Установите: pip install soccerdata lxml html5lib --break-system-packages")
+        print("  → Или: pip install soccerdata lxml html5lib")
+        return 0
+
+    total = 0
+    cur   = current_season_start()
+
+    for league_name, league_code in FBREF_LEAGUES.items():
+        meta = FOOTBALL_DATA_LEAGUES.get(league_code, {'name': league_name, 'country': ''})
+        for i in range(seasons_back):
+            season_year = cur - i
+            # soccerdata использует формат "YYYY"
+            season_str_sd = str(season_year)
+            season_str_ch = f"{season_year}-{str(season_year+1)[-2:]}"
+            print(f"  [fbref] {league_code} {season_year} ({league_name})")
+            try:
+                fbref = sd.FBref(league_name, season_str_sd)
+                schedule = fbref.read_schedule()
+
+                if schedule is None or len(schedule) == 0:
+                    print(f"    ✗ расписание пустое")
+                    continue
+
+                # read_schedule возвращает DataFrame с колонками:
+                # home_team, away_team, date, home_g, away_g, home_xg, away_xg и др.
+                rows = []
+                for _, row in schedule.iterrows():
+                    dt = row.get('date', None)
+                    if dt is None:
+                        continue
+                    dt_str = str(dt)[:10]
+                    home   = str(row.get('home_team', ''))
+                    away   = str(row.get('away_team', ''))
+                    if not home or not away or home == 'nan':
+                        continue
+                    hg = safe_int(row.get('home_g', 0))
+                    ag = safe_int(row.get('away_g', 0))
+                    # xG может отсутствовать для старых матчей
+                    hxg = safe_float(row.get('home_xg', 0))
+                    axg = safe_float(row.get('away_xg', 0))
+                    # Пропускаем незавершённые
+                    if hg == 0 and ag == 0 and hxg == 0 and axg == 0:
+                        continue
+
+                    rows.append({
+                        'match_id':    str(row.get('game_id', make_match_id(dt_str, home, away, league_code))),
+                        'source':      'fbref',
+                        'date':        dt_str,
+                        'season':      season_str_ch,
+                        'league_code': league_code,
+                        'league_name': meta['name'],
+                        'country':     meta.get('country', ''),
+                        'home_team':   home,
+                        'away_team':   away,
+                        'home_goals':  hg,
+                        'away_goals':  ag,
+                        'result':      'H' if hg > ag else ('A' if ag > hg else 'D'),
+                        'home_xg':     hxg,
+                        'away_xg':     axg,
+                        'home_xga':    axg,
+                        'away_xga':    hxg,
+                        'ht_home_goals': safe_int(row.get('home_g_ht', 0)),
+                        'ht_away_goals': safe_int(row.get('away_g_ht', 0)),
+                        'home_shots':           safe_int(row.get('home_sh', 0)),
+                        'away_shots':           safe_int(row.get('away_sh', 0)),
+                        'home_shots_on_target': safe_int(row.get('home_sot', 0)),
+                        'away_shots_on_target': safe_int(row.get('away_sot', 0)),
+                    })
+
+                if rows:
+                    for j in range(0, len(rows), batch_size):
+                        ch.insert_json_batch('football_matches', rows[j:j+batch_size])
+                    ch.log('football', 'fbref', league_code, season_str_ch, len(rows), 'ok')
+                    print(f"    ✓ {len(rows)} матчей (xG: {sum(1 for r in rows if r['home_xg'] > 0)} матчей с xG)")
+                    total += len(rows)
+                else:
+                    print(f"    ✗ 0 матчей")
+
+                time.sleep(3)  # уважаем FBref
+
+            except Exception as e:
+                print(f"    ✗ ERROR: {e}")
+                # FBref иногда даёт timeout или rate limit — продолжаем
+                time.sleep(5)
+
+    return total
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Understat — ЗАБЛОКИРОВАН Cloudflare (оставлен для истории)
+# ═══════════════════════════════════════════════════════════════════════
 
 def scrape_understat_league(ch, league, season_year, batch_size=200):
     """
-    Скачивает все матчи лиги с understat за сезон
-    season_year: 2023 для сезона 2023-24
+    Understat заблокирован Cloudflare на серверных IP.
+    Функция оставлена для обратной совместимости но всегда возвращает 0.
+    Используйте FBref (SOURCE 5) для xG данных.
     """
-    url = f"https://understat.com/league/{league}/{season_year}"
-    print(f"  [understat] {league} {season_year} → {url}")
-
-    try:
-        content = fetch_url(url, timeout=30)
-        if not content:
-            print(f"    ✗ empty response")
-            return 0
-        html = content.decode('utf-8', errors='replace')
-    except Exception as e:
-        print(f"    ✗ fetch error: {e}")
-        return 0
-
-    # Парсим datesData — список матчей с xG
-    data = extract_json_from_script(html, 'datesData')
-    if not data:
-        print(f"    ✗ datesData not found")
-        return 0
-
-    meta = UNDERSTAT_LEAGUES.get(league, {'fd_code': league, 'name': league})
-    season_str = f"{season_year}-{str(season_year+1)[-2:]}"
-    matches = []
-    match_ids = []
-
-    for m in data:
-        if not m.get('isResult'):
-            continue
-
-        h_goals = safe_int(m.get('goals', {}).get('h', 0))
-        a_goals = safe_int(m.get('goals', {}).get('a', 0))
-        h_xg    = safe_float(m.get('xG', {}).get('h', 0))
-        a_xg    = safe_float(m.get('xG', {}).get('a', 0))
-        h_team  = m.get('h', {}).get('title', '')
-        a_team  = m.get('a', {}).get('title', '')
-        dt_str  = m.get('datetime', '')[:10]
-        m_id    = str(m.get('id', ''))
-
-        if not h_team or not a_team or not dt_str:
-            continue
-
-        result = 'H' if h_goals > a_goals else ('A' if a_goals > h_goals else 'D')
-
-        row = {
-            'match_id':    m_id or make_match_id(dt_str, h_team, a_team, meta['fd_code']),
-            'source':      'understat',
-            'date':        dt_str,
-            'season':      season_str,
-            'league_code': meta['fd_code'],
-            'league_name': meta['name'],
-            'country':     '',
-            'home_team':   h_team,
-            'away_team':   a_team,
-            'home_goals':  h_goals,
-            'away_goals':  a_goals,
-            'result':      result,
-            'home_xg':     h_xg,
-            'away_xg':     a_xg,
-            'home_xga':    a_xg,   # xGA для home = xG allowed = xG away
-            'away_xga':    h_xg,
-            'forecast_win':  safe_float(m.get('forecast', {}).get('w', 0)),
-            'forecast_draw': safe_float(m.get('forecast', {}).get('d', 0)),
-            'forecast_loss': safe_float(m.get('forecast', {}).get('l', 0)),
-        }
-        matches.append(row)
-        match_ids.append((m_id, dt_str, h_team, a_team))
-
-    if matches:
-        for i in range(0, len(matches), batch_size):
-            ch.insert_json_batch('football_matches', matches[i:i+batch_size])
-        ch.log('football', 'understat', league, season_str, len(matches), 'ok')
-        print(f"    ✓ {len(matches)} матчей с xG")
-
-    # Скачиваем детальные события (удары) для каждого матча
-    events_total = scrape_understat_match_events(ch, match_ids, meta)
-
-    return len(matches)
-
-def scrape_understat_match_events(ch, match_ids, meta, max_matches=None, delay=1.5):
-    """
-    Скачивает поминутные удары/голы для каждого матча с understat
-    Лимитируем max_matches чтобы не перегружать сервер
-    """
-    total_events = 0
-    to_process = match_ids[:max_matches] if max_matches else match_ids
-
-    print(f"    → Загружаю события для {len(to_process)} матчей...")
-
-    for idx, (mid, dt_str, h_team, a_team) in enumerate(to_process):
-        if not mid or mid == '0':
-            continue
-
-        url = f"https://understat.com/match/{mid}"
-        try:
-            content = fetch_url(url, timeout=20)
-            if not content:
-                continue
-            html = content.decode('utf-8', errors='replace')
-
-            shot_data = extract_json_from_script(html, 'shotsData')
-            if not shot_data:
-                continue
-
-            events = []
-            h_score = 0
-            a_score = 0
-
-            for side in ['h', 'a']:
-                for shot in shot_data.get(side, []):
-                    is_goal = shot.get('result') == 'Goal'
-                    if is_goal:
-                        if side == 'h':
-                            h_score += 1
-                        else:
-                            a_score += 1
-                    events.append({
-                        'match_id':   mid,
-                        'date':       dt_str,
-                        'league_code': meta.get('fd_code', ''),
-                        'minute':     safe_int(shot.get('minute', 0)),
-                        'event_type': 'goal' if is_goal else 'shot',
-                        'team':       side,
-                        'team_name':  h_team if side == 'h' else a_team,
-                        'player':     shot.get('player', ''),
-                        'player_id':  str(shot.get('player_id', '')),
-                        'xg_shot':    safe_float(shot.get('xG', 0)),
-                        'x_coord':    safe_float(shot.get('X', 0)),
-                        'y_coord':    safe_float(shot.get('Y', 0)),
-                        'situation':  shot.get('situation', ''),
-                        'shot_type':  shot.get('shotType', ''),
-                        'home_score': h_score,
-                        'away_score': a_score,
-                    })
-
-            if events:
-                ch.insert_json_batch('football_events', events)
-                total_events += len(events)
-
-            if (idx + 1) % 20 == 0:
-                print(f"      {idx+1}/{len(to_process)} матчей обработано, событий: {total_events}")
-
-            time.sleep(delay)
-
-        except Exception as e:
-            # Не прерываем всё из-за одного матча
-            pass
-
-    print(f"    ✓ Событий загружено: {total_events}")
-    return total_events
+    print(f"  [understat] {league} {season_year} → ПРОПУЩЕН (Cloudflare блокировка)")
+    print(f"    → Для xG используйте: python3 scraper_football.py --xg-source fbref")
+    return 0
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Расчёт формы команды (rolling stats ДО каждого матча)
 # ═══════════════════════════════════════════════════════════════════════
 
 def compute_team_form(ch):
-    """
-    Вычисляет rolling stats для каждой команды перед каждым матчем
-    и загружает в football_team_form
-    """
     print("\n  [form] Вычисляем форму команд...")
-
-    # Получаем все матчи отсортированные по дате
     sql = """
     SELECT match_id, date, league_code, season, home_team, away_team,
            home_goals, away_goals, result,
@@ -546,9 +756,10 @@ def compute_team_form(ch):
     FROM betquant.football_matches
     WHERE home_goals > 0 OR away_goals > 0 OR home_shots > 0
     ORDER BY date ASC
+    FORMAT JSONEachRow
     """
     try:
-        raw = ch.query(sql + " FORMAT JSONEachRow")
+        raw = ch.query(sql)
     except Exception as e:
         print(f"    ✗ query error: {e}")
         return
@@ -556,18 +767,15 @@ def compute_team_form(ch):
     matches = [json.loads(l) for l in raw.strip().split('\n') if l.strip()]
     print(f"    Обрабатываем {len(matches)} матчей...")
 
-    # Группируем по команде
-    # team_history[team] = список матчей в хронологическом порядке
     team_history = defaultdict(list)
-
-    form_rows = []
+    form_rows    = []
 
     for m in matches:
-        home = m['home_team']
-        away = m['away_team']
-        dt   = m['date']
+        home   = m['home_team']
+        away   = m['away_team']
+        dt     = m['date']
         hg, ag = int(m['home_goals']), int(m['away_goals'])
-        mid  = m['match_id']
+        mid    = m['match_id']
         league = m['league_code']
         season = m['season']
 
@@ -575,144 +783,101 @@ def compute_team_form(ch):
             hist = team_history[team]
             if not hist:
                 return {}
-
-            # Последние 5 и 10 матчей
             last5  = hist[-5:]
             last10 = hist[-10:]
-
-            def form_str(games):
-                return ''.join(g['r'] for g in games)
-
-            def pts(games):
-                return sum(3 if g['r']=='W' else (1 if g['r']=='D' else 0) for g in games)
-
-            # Текущий сезон (все матчи в этом сезоне)
-            season_games = [g for g in hist if g['season'] == season]
-            sgf = sum(g['gf'] for g in season_games)
-            sga = sum(g['ga'] for g in season_games)
-
-            # Прошлый сезон
-            seasons_sorted = sorted(set(g['season'] for g in hist), reverse=True)
-            prev_s = seasons_sorted[1] if len(seasons_sorted) > 1 else ''
-            prev_games = [g for g in hist if g['season'] == prev_s]
-
-            # Последние 30 дней
-            cutoff_30 = (datetime.strptime(dt, '%Y-%m-%d') - timedelta(days=30)).strftime('%Y-%m-%d')
-            last30 = [g for g in hist if g['date'] >= cutoff_30]
-
-            # Календарный год
-            year_start = dt[:4] + '-01-01'
-            ytd = [g for g in hist if g['date'] >= year_start]
-
-            # Дома/гость
-            home_games = [g for g in season_games if g['venue'] == 'home']
-            away_games = [g for g in season_games if g['venue'] == 'away']
-
-            # H2H
-            opp = away if is_home else home
-            h2h = [g for g in hist if g['opponent'] == opp][-5:]
-
+            f_str  = lambda games: ''.join(g['r'] for g in games)
+            pts    = lambda games: sum(3 if g['r']=='W' else (1 if g['r']=='D' else 0) for g in games)
+            sg     = [g for g in hist if g['season'] == season]
+            sgf    = sum(g['gf'] for g in sg)
+            sga    = sum(g['ga'] for g in sg)
+            ss     = sorted(set(g['season'] for g in hist), reverse=True)
+            prev_s = ss[1] if len(ss) > 1 else ''
+            pg     = [g for g in hist if g['season'] == prev_s]
+            c30    = (datetime.strptime(dt, '%Y-%m-%d') - timedelta(days=30)).strftime('%Y-%m-%d')
+            l30    = [g for g in hist if g['date'] >= c30]
+            ys     = dt[:4] + '-01-01'
+            ytd    = [g for g in hist if g['date'] >= ys]
+            hg_    = [g for g in sg if g['venue'] == 'home']
+            ag_    = [g for g in sg if g['venue'] == 'away']
+            opp    = away if is_home else home
+            h2h    = [g for g in hist if g['opponent'] == opp][-5:]
             return {
-                'match_id':    mid,
-                'date':        dt,
-                'team':        team,
-                'league_code': league,
-                'season':      season,
-                'is_home':     1 if is_home else 0,
-                'form_5':      form_str(last5),
-                'form_10':     form_str(last10),
-                'pts_5':       pts(last5),
-                'pts_10':      pts(last10),
-
-                'season_matches':        len(season_games),
-                'season_wins':           sum(1 for g in season_games if g['r']=='W'),
-                'season_draws':          sum(1 for g in season_games if g['r']=='D'),
-                'season_losses':         sum(1 for g in season_games if g['r']=='L'),
-                'season_goals_for':      sgf,
-                'season_goals_against':  sga,
-                'season_goal_diff':      sgf - sga,
-                'season_corners_for':    sum(g.get('cf', 0) for g in season_games),
-                'season_corners_against':sum(g.get('ca', 0) for g in season_games),
-                'season_yellow':         sum(g.get('yc', 0) for g in season_games),
-                'season_xg_for':         round(sum(g.get('xgf', 0) for g in season_games), 2),
-                'season_xg_against':     round(sum(g.get('xga', 0) for g in season_games), 2),
-                'season_shots_for':      sum(g.get('sf', 0) for g in season_games),
-                'season_shots_against':  sum(g.get('sa', 0) for g in season_games),
-
-                'prev_season':               prev_s,
-                'prev_season_matches':        len(prev_games),
-                'prev_season_wins':           sum(1 for g in prev_games if g['r']=='W'),
-                'prev_season_goals_for':      sum(g['gf'] for g in prev_games),
-                'prev_season_goals_against':  sum(g['ga'] for g in prev_games),
-                'prev_season_xg_for':         round(sum(g.get('xgf', 0) for g in prev_games), 2),
-                'prev_season_xg_against':     round(sum(g.get('xga', 0) for g in prev_games), 2),
-
-                'last30_matches':       len(last30),
-                'last30_goals_for':     sum(g['gf'] for g in last30),
-                'last30_goals_against': sum(g['ga'] for g in last30),
-                'last30_xg_for':        round(sum(g.get('xgf', 0) for g in last30), 2),
-                'last30_corners':       sum(g.get('cf', 0) for g in last30),
-                'last30_yellow':        sum(g.get('yc', 0) for g in last30),
-
+                'match_id': mid, 'date': dt, 'team': team,
+                'league_code': league, 'season': season, 'is_home': 1 if is_home else 0,
+                'form_5': f_str(last5), 'form_10': f_str(last10),
+                'pts_5': pts(last5), 'pts_10': pts(last10),
+                'season_matches': len(sg), 'season_wins': sum(1 for g in sg if g['r']=='W'),
+                'season_draws': sum(1 for g in sg if g['r']=='D'),
+                'season_losses': sum(1 for g in sg if g['r']=='L'),
+                'season_goals_for': sgf, 'season_goals_against': sga, 'season_goal_diff': sgf-sga,
+                'season_corners_for':    sum(g.get('cf',0) for g in sg),
+                'season_corners_against':sum(g.get('ca',0) for g in sg),
+                'season_yellow':         sum(g.get('yc',0) for g in sg),
+                'season_xg_for':         round(sum(g.get('xgf',0) for g in sg), 2),
+                'season_xg_against':     round(sum(g.get('xga',0) for g in sg), 2),
+                'season_shots_for':      sum(g.get('sf',0) for g in sg),
+                'season_shots_against':  sum(g.get('sa',0) for g in sg),
+                'prev_season': prev_s, 'prev_season_matches': len(pg),
+                'prev_season_wins': sum(1 for g in pg if g['r']=='W'),
+                'prev_season_goals_for':     sum(g['gf'] for g in pg),
+                'prev_season_goals_against': sum(g['ga'] for g in pg),
+                'prev_season_xg_for':  round(sum(g.get('xgf',0) for g in pg), 2),
+                'prev_season_xg_against': round(sum(g.get('xga',0) for g in pg), 2),
+                'last30_matches':       len(l30),
+                'last30_goals_for':     sum(g['gf'] for g in l30),
+                'last30_goals_against': sum(g['ga'] for g in l30),
+                'last30_xg_for':  round(sum(g.get('xgf',0) for g in l30), 2),
+                'last30_corners': sum(g.get('cf',0) for g in l30),
+                'last30_yellow':  sum(g.get('yc',0) for g in l30),
                 'ytd_matches':          len(ytd),
                 'ytd_goals_for':        sum(g['gf'] for g in ytd),
                 'ytd_goals_against':    sum(g['ga'] for g in ytd),
-                'ytd_xg_for':           round(sum(g.get('xgf', 0) for g in ytd), 2),
-
-                'home_season_matches':           len(home_games),
-                'home_season_goals_for':         sum(g['gf'] for g in home_games),
-                'home_season_goals_against':     sum(g['ga'] for g in home_games),
-                'away_season_matches':           len(away_games),
-                'away_season_goals_for':         sum(g['gf'] for g in away_games),
-                'away_season_goals_against':     sum(g['ga'] for g in away_games),
-
-                'h2h_wins':           sum(1 for g in h2h if g['r']=='W'),
-                'h2h_draws':          sum(1 for g in h2h if g['r']=='D'),
-                'h2h_losses':         sum(1 for g in h2h if g['r']=='L'),
-                'h2h_goals_for':      sum(g['gf'] for g in h2h),
-                'h2h_goals_against':  sum(g['ga'] for g in h2h),
-                'h2h_matches':        len(h2h),
+                'ytd_xg_for': round(sum(g.get('xgf',0) for g in ytd), 2),
+                'home_season_matches':           len(hg_),
+                'home_season_goals_for':         sum(g['gf'] for g in hg_),
+                'home_season_goals_against':     sum(g['ga'] for g in hg_),
+                'away_season_matches':           len(ag_),
+                'away_season_goals_for':         sum(g['gf'] for g in ag_),
+                'away_season_goals_against':     sum(g['ga'] for g in ag_),
+                'h2h_wins':   sum(1 for g in h2h if g['r']=='W'),
+                'h2h_draws':  sum(1 for g in h2h if g['r']=='D'),
+                'h2h_losses': sum(1 for g in h2h if g['r']=='L'),
+                'h2h_goals_for':     sum(g['gf'] for g in h2h),
+                'h2h_goals_against': sum(g['ga'] for g in h2h),
+                'h2h_matches':       len(h2h),
             }
 
-        # Строим форму ДО матча
-        home_form = build_form(home, True)
-        away_form = build_form(away, False)
-        if home_form: form_rows.append(home_form)
-        if away_form: form_rows.append(away_form)
+        hf = build_form(home, True)
+        af = build_form(away, False)
+        if hf: form_rows.append(hf)
+        if af: form_rows.append(af)
 
-        # Добавляем этот матч в историю команд
-        for team, is_home_team in [(home, True), (away, False)]:
-            gf = hg if is_home_team else ag
-            ga = ag if is_home_team else hg
-            r  = ('W' if gf > ga else ('L' if gf < ga else 'D'))
+        for team, is_home_t in [(home, True), (away, False)]:
+            gf  = hg if is_home_t else ag
+            ga  = ag if is_home_t else hg
+            r   = 'W' if gf > ga else ('L' if gf < ga else 'D')
             hxg = safe_float(m.get('home_xg', 0))
             axg = safe_float(m.get('away_xg', 0))
-            entry = {
-                'date':     dt,
-                'season':   season,
-                'league':   league,
-                'opponent': away if is_home_team else home,
-                'venue':    'home' if is_home_team else 'away',
+            team_history[team].append({
+                'date': dt, 'season': season, 'league': league,
+                'opponent': away if is_home_t else home,
+                'venue': 'home' if is_home_t else 'away',
                 'gf': gf, 'ga': ga, 'r': r,
-                'cf': safe_int(m.get('home_corners' if is_home_team else 'away_corners', 0)),
-                'ca': safe_int(m.get('away_corners' if is_home_team else 'home_corners', 0)),
-                'yc': safe_int(m.get('home_yellow' if is_home_team else 'away_yellow', 0)),
-                'xgf': hxg if is_home_team else axg,
-                'xga': axg if is_home_team else hxg,
-                'sf': safe_int(m.get('home_shots' if is_home_team else 'away_shots', 0)),
-                'sa': safe_int(m.get('away_shots' if is_home_team else 'home_shots', 0)),
-            }
-            team_history[team].append(entry)
+                'cf': safe_int(m.get('home_corners' if is_home_t else 'away_corners', 0)),
+                'ca': safe_int(m.get('away_corners' if is_home_t else 'home_corners', 0)),
+                'yc': safe_int(m.get('home_yellow'  if is_home_t else 'away_yellow', 0)),
+                'xgf': hxg if is_home_t else axg,
+                'xga': axg if is_home_t else hxg,
+                'sf': safe_int(m.get('home_shots' if is_home_t else 'away_shots', 0)),
+                'sa': safe_int(m.get('away_shots' if is_home_t else 'home_shots', 0)),
+            })
 
-        # Батчевая запись
         if len(form_rows) >= 1000:
             ch.insert_json_batch('football_team_form', form_rows)
             form_rows = []
 
-    # Остаток
     if form_rows:
         ch.insert_json_batch('football_team_form', form_rows)
-
     print(f"    ✓ Форма команд рассчитана")
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -720,24 +885,40 @@ def compute_team_form(ch):
 # ═══════════════════════════════════════════════════════════════════════
 
 def main():
-    parser = argparse.ArgumentParser(description='BetQuant Football ETL')
-    parser.add_argument('--leagues',   default='top',
-                        help='all | top | E0,D1,SP1,... (через запятую)')
-    parser.add_argument('--seasons',   type=int, default=3,
-                        help='Сколько сезонов назад загружать (default: 3)')
-    parser.add_argument('--ch-host',   default='http://localhost:8123')
-    parser.add_argument('--ch-db',     default='betquant')
-    parser.add_argument('--ch-user',   default='default')
-    parser.add_argument('--ch-pass',   default='')
-    parser.add_argument('--skip-understat', action='store_true')
-    parser.add_argument('--skip-form',      action='store_true')
-    parser.add_argument('--events-limit',   type=int, default=None,
-                        help='Макс матчей для парсинга событий с understat (default: все)')
+    parser = argparse.ArgumentParser(description='BetQuant Football ETL v2')
+    parser.add_argument('--leagues',    default='top',
+                        help='all | top | E0,D1,SP1,...')
+    parser.add_argument('--seasons',    type=int, default=3,
+                        help='Сколько сезонов назад (default: 3)')
+    parser.add_argument('--ch-host',    default='http://localhost:8123')
+    parser.add_argument('--ch-db',      default='betquant')
+    parser.add_argument('--ch-user',    default='default')
+    parser.add_argument('--ch-pass',    default='')
+    parser.add_argument('--skip-fd',    action='store_true',
+                        help='Пропустить football-data.co.uk')
+    parser.add_argument('--skip-openliga', action='store_true',
+                        help='Пропустить OpenLigaDB')
+    parser.add_argument('--skip-fdo',   action='store_true',
+                        help='Пропустить football-data.org')
+    parser.add_argument('--skip-statsbomb', action='store_true',
+                        help='Пропустить StatsBomb Open Data')
+    parser.add_argument('--skip-fbref', action='store_true',
+                        help='Пропустить FBref/soccerdata')
+    parser.add_argument('--skip-understat', action='store_true',
+                        help='(устарело, Understat заблокирован Cloudflare)')
+    parser.add_argument('--skip-form',  action='store_true',
+                        help='Пропустить расчёт формы команд')
+    parser.add_argument('--xg-source',  default='fbref',
+                        choices=['fbref', 'statsbomb', 'both', 'none'],
+                        help='Источник xG данных (default: fbref)')
+    parser.add_argument('--fdo-token',  default='',
+                        help='Токен football-data.org (или FOOTBALLDATA_ORG_TOKEN в env)')
+    parser.add_argument('--events-limit', type=int, default=None,
+                        help='(устарело)')
     args = parser.parse_args()
 
     ch = ClickHouseClient(args.ch_host, args.ch_db, args.ch_user, args.ch_pass)
 
-    # Проверяем связь
     try:
         ch.execute("SELECT 1")
         print("✅ ClickHouse подключён")
@@ -755,42 +936,64 @@ def main():
         leagues = [l.strip() for l in args.leagues.split(',')]
 
     seasons = make_seasons(args.seasons)
-    print(f"\n📊 Football-data.co.uk: {len(leagues)} лиг × {len(seasons)} сезонов")
-    print(f"   Лиги: {', '.join(leagues)}")
-    print(f"   Сезоны: {', '.join(seasons[:6])}...")
+    totals  = {}
 
-    # ── football-data.co.uk ──────────────────────────────────────────
-    total_fd = scrape_football_data(ch, leagues, seasons)
-    print(f"\n✅ football-data.co.uk: {total_fd} матчей загружено")
+    # ── SOURCE 1: football-data.co.uk ─────────────────────────────────
+    if not args.skip_fd:
+        print(f"\n📊 football-data.co.uk: {len(leagues)} лиг × {len(seasons)} сезонов")
+        totals['football-data.co.uk'] = scrape_football_data(ch, leagues, seasons)
+        print(f"✅ football-data.co.uk: {totals['football-data.co.uk']} матчей")
 
-    # ── understat ────────────────────────────────────────────────────
-    if not args.skip_understat:
-        print(f"\n📊 Understat: 6 лиг × {args.seasons} сезонов")
-        total_us = 0
-        today = date.today()
-        for season_year in range(today.year - args.seasons, today.year + 1):
-            for league in UNDERSTAT_LEAGUES:
-                try:
-                    n = scrape_understat_league(ch, league, season_year)
-                    total_us += n
-                    time.sleep(2)
-                except Exception as e:
-                    print(f"  ✗ {league} {season_year}: {e}")
-        print(f"\n✅ Understat: {total_us} матчей с xG загружено")
+    # ── SOURCE 2: OpenLigaDB ───────────────────────────────────────────
+    if not args.skip_openliga:
+        print(f"\n📊 OpenLigaDB (Бундеслига, без ключа)...")
+        totals['openligadb'] = scrape_openligadb(ch, seasons_back=args.seasons)
+        print(f"✅ OpenLigaDB: {totals['openligadb']} матчей")
 
-    # ── Форма команд ─────────────────────────────────────────────────
+    # ── SOURCE 3: football-data.org ────────────────────────────────────
+    if not args.skip_fdo:
+        fdo_token = args.fdo_token or os.environ.get('FOOTBALLDATA_ORG_TOKEN', '')
+        print(f"\n📊 football-data.org API (топ-лиги + CL)...")
+        totals['football-data.org'] = scrape_footballdata_org(ch, fdo_token, seasons_back=args.seasons)
+        print(f"✅ football-data.org: {totals['football-data.org']} матчей")
+
+    # ── SOURCE 4 & 5: xG данные ────────────────────────────────────────
+    xg_src = args.xg_source
+    if xg_src in ('statsbomb', 'both', 'fbref') and not args.skip_statsbomb:
+        print(f"\n📊 StatsBomb Open Data (xG, GitHub)...")
+        totals['statsbomb'] = scrape_statsbomb_open(ch, seasons_back=args.seasons)
+        print(f"✅ StatsBomb: {totals['statsbomb']} матчей")
+
+    # FBref отключён — блокирует серверные IP (Cloudflare 403, аналогично Understat)
+    if xg_src in ('fbref', 'both') and not args.skip_fbref:
+        print(f"\n⚠️  FBref/soccerdata — заблокирован Cloudflare (403) на серверных IP")
+        print(f"    Используем StatsBomb Open Data как замену xG источника")
+        totals['fbref'] = 0
+
+    # ── Форма команд ───────────────────────────────────────────────────
     if not args.skip_form:
         compute_team_form(ch)
 
-    # ── Итоговая статистика ─────────────────────────────────────────
+    # ── Итог ───────────────────────────────────────────────────────────
     print("\n" + "="*60)
-    print("📈 ИТОГ:")
+    print("📈 ИТОГ по источникам:")
+    for src, n in totals.items():
+        print(f"  {src:<28}: {n:>8,} матчей")
+    print()
     try:
-        print(f"  football_matches:   {ch.count('football_matches'):>8,}")
-        print(f"  football_events:    {ch.count('football_events'):>8,}")
-        print(f"  football_team_form: {ch.count('football_team_form'):>8,}")
+        print(f"  football_matches   в CH: {ch.count('football_matches'):>8,}")
+        print(f"  football_team_form в CH: {ch.count('football_team_form'):>8,}")
     except Exception as e:
-        print(f"  (статистика недоступна: {e})")
+        print(f"  (статистика CH недоступна: {e})")
+    print()
+    print("💡 Подсказки:")
+    if not (args.fdo_token or os.environ.get('FOOTBALLDATA_ORG_TOKEN')):
+        print("  • Получите бесплатный токен football-data.org:")
+        print("    https://www.football-data.org/client/register")
+        print("    Добавьте в .env: FOOTBALLDATA_ORG_TOKEN=токен")
+    if xg_src not in ('fbref', 'both'):
+        print("  • Для xG данных: python3 scraper_football.py --xg-source fbref")
+        print("    Установка: pip install soccerdata lxml html5lib --break-system-packages")
 
 if __name__ == '__main__':
     main()

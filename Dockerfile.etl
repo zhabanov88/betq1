@@ -2,14 +2,17 @@ FROM python:3.11-slim
 
 LABEL description="BetQuant ETL v1 — Football/Hockey/Tennis/NBA/MLB Data Loader"
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl git \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir \
     requests \
     beautifulsoup4 \
     lxml \
     aiohttp \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+    soccerdata \
+    html5lib
 
 WORKDIR /opt/etl
 
@@ -18,9 +21,16 @@ COPY betquant-etl/ ./
 
 RUN chmod +x deploy_and_run.sh 2>/dev/null || true
 
-# По умолчанию — полный ETL, 3 сезона
-CMD ["python3", "run_etl.py", \
-     "--ch-host", "http://clickhouse:8123", \
-     "--ch-db",   "betquant", \
-     "--ch-user", "default", \
-     "--seasons", "3"]
+# Переменные окружения (переопределяются из docker-compose environment:)
+ENV CH_HOST=http://clickhouse:8123
+ENV CH_DB=betquant
+ENV CH_USER=default
+ENV CH_PASS=
+ENV ETL_SEASONS=3
+
+# Используем shell-форму CMD чтобы переменные ENV подставлялись
+CMD python3 run_etl.py \
+    --ch-host "$CH_HOST" \
+    --ch-db   "$CH_DB" \
+    --ch-user "$CH_USER" \
+    --seasons "$ETL_SEASONS"
