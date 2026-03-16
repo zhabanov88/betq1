@@ -56,16 +56,13 @@ const library = {
 
   // ── Рендер панели ─────────────────────────────────────────────────────────
   render() {
-    const container = document.getElementById('libraryGrid');
-    if (!container) return;
-
-    // Если родительский контейнер — перерисуем всю панель
     const panel = document.getElementById('panel-library');
-    if (panel) {
-      panel.innerHTML = this._buildPanelHTML();
-      this._bindEvents();
-    }
-
+    if (!panel) return;
+  
+    // Всегда перестраиваем панель полностью
+    panel.innerHTML = this._buildPanelHTML();
+    this._bindEvents();
+  
     this._renderCards();
     this._renderSignalPanel();
   },

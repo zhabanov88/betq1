@@ -95,7 +95,7 @@ const app = {
     this.showPanel('dashboard');
     dashboard.refresh();
     scraper.initSourcesGrid();
-    library.load();
+    //library.load();
     journal.refresh();
     alerts.load();
     aiStrategy.init();
@@ -134,7 +134,7 @@ showPanel(name) {
   // Инициализация модулей при открытии панели
   if (name === 'database')  db.refresh();
   if (name === 'stats')     statsEngine.load();
-  if (name === 'library')   library.load();
+  if (name === 'library')   library.init();
   if (name === 'value')     valueFinder.init();
   if (name === 'neural'     && typeof neuralPanel      !== 'undefined') neuralPanel.init();
   if (name === 'live'       && typeof liveMonitor      !== 'undefined') liveMonitor.init();
