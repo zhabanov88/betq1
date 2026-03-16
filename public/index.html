@@ -536,52 +536,101 @@
               <h2>📡 Realtime Collector</h2>
               <div class="panel-controls" id="rt-control-btns"></div>
             </div>
-        
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-        
-              <!-- Статус контейнера -->
-              <div class="stat-card">
-                <div class="stat-label">Docker контейнер</div>
-                <div id="rt-container-status" style="margin-top:8px"></div>
-                <div id="rt-action-msg" style="font-size:12px;margin-top:8px;min-height:18px"></div>
-              </div>
-        
-              <!-- The Odds API -->
-              <div class="stat-card">
-                <div class="stat-label">The Odds API — расход</div>
-                <div id="rt-odds-usage" style="margin-top:8px"></div>
-              </div>
-        
-            </div>
-        
-            <!-- Таблицы данных -->
-            <div class="stat-card" style="margin-bottom:16px">
-              <div class="stat-label" style="margin-bottom:12px">Состояние таблиц</div>
-              <table style="width:100%;border-collapse:collapse;font-size:13px">
-                <thead>
-                  <tr style="color:var(--text3);font-size:11px;text-transform:uppercase">
-                    <th style="text-align:left;padding:4px 0">Таблица</th>
-                    <th style="text-align:right;padding:4px 8px">Строк</th>
-                    <th style="padding:4px 8px">Последнее</th>
-                    <th style="padding:4px 8px">Частота</th>
-                  </tr>
-                </thead>
-                <tbody id="rt-tables-body"></tbody>
-              </table>
-            </div>
-        
-            <!-- Логи -->
-            <div id="rt-logs-wrap" style="display:none">
-              <div class="stat-card">
-                <div class="stat-label">Логи контейнера (обновляются каждые 10с)</div>
-                <div id="rt-logs-output"
-                     style="margin-top:10px;max-height:400px;overflow-y:auto;
-                            font-family:var(--font-mono);font-size:11px;
-                            background:var(--bg);border-radius:4px;padding:10px">
+            <div class="panel" id="panel-realtime">
+                <div class="panel-header">
+                  <h2>📡 Realtime Monitor</h2>
+                  <div class="panel-controls" id="rt-control-btns"></div>
                 </div>
-              </div>
+       
+                <!-- Верхняя строка: контейнер + Odds API -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+       
+                  <!-- Статус контейнера -->
+                  <div class="config-section">
+                    <div class="config-title">🐳 Контейнер betquant-realtime</div>
+                    <div id="rt-container-status" style="min-height:60px">
+                      <div style="color:var(--text3);font-size:12px">Загрузка...</div>
+                    </div>
+                  </div>
+       
+                  <!-- Odds API + Value Finder -->
+                  <div class="config-section">
+                    <div class="config-title">💎 Источники данных</div>
+                    <div id="rt-odds-usage" style="margin-bottom:12px"></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      <button class="ctrl-btn primary" onclick="app.showPanel('value')" style="font-size:12px">
+                        💎 Открыть Value Finder →
+                      </button>
+                      <button class="ctrl-btn" onclick="app.showPanel('backtest')" style="font-size:12px">
+                        ⚙️ Стратегии →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+       
+                <!-- ETL таблицы -->
+                <div class="config-section" style="margin-bottom:16px">
+                  <div class="config-title">
+                    🗄 Состояние базы данных (ETL таблицы)
+                    <span style="font-size:10px;font-weight:400;color:var(--text3);margin-left:8px">
+                      обновляется каждые 20 сек
+                    </span>
+                  </div>
+                  <div style="overflow-x:auto">
+                    <table class="data-table" style="font-size:12px">
+                      <thead>
+                        <tr>
+                          <th>Таблица</th>
+                          <th style="text-align:right">Строк</th>
+                          <th>Возраст данных</th>
+                          <th>Статус</th>
+                        </tr>
+                      </thead>
+                      <tbody id="rt-tables-body">
+                        <tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Загрузка...</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+       
+                <!-- ETL источники -->
+                <div class="config-section" style="margin-bottom:16px">
+                  <div class="config-title">📥 Источники данных (из ETL лога)</div>
+                  <div id="rt-sources">
+                    <div style="color:var(--text3);font-size:12px;padding:8px">Загрузка...</div>
+                  </div>
+                </div>
+       
+                <!-- Логи и ETL лог (раскрывающиеся) -->
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                  <button class="ctrl-btn sm" onclick="realtimePanel.toggleEtlLog()">
+                    🗃 ETL Лог из ClickHouse
+                  </button>
+                  <button class="ctrl-btn sm" onclick="realtimePanel.toggleLogs()">
+                    📋 Логи контейнера
+                  </button>
+                </div>
+       
+                <!-- ETL лог -->
+                <div id="rt-etllog-wrap" style="display:none;margin-bottom:16px">
+                  <div class="config-section">
+                    <div class="config-title">🗃 ETL Лог (последние 50 записей)</div>
+                    <div id="rt-etllog-output" style="max-height:300px;overflow-y:auto"></div>
+                  </div>
+                </div>
+       
+                <!-- Логи контейнера -->
+                <div id="rt-logs-wrap" style="display:none">
+                  <div class="config-section">
+                    <div class="config-title">📋 Логи контейнера betquant-realtime</div>
+                    <div id="rt-logs-output"
+                         style="max-height:300px;overflow-y:auto;background:var(--bg3);
+                                border-radius:6px;padding:10px;font-family:var(--font-mono);font-size:11px">
+                    </div>
+                  </div>
+                </div>
             </div>
-          </div>
+        </div>
         <!-- STATS -->
         <div class="panel" id="panel-stats">
             <div class="panel-header"><h2>📊 Статистика</h2></div>

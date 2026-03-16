@@ -294,7 +294,22 @@ function applyStrategies(bets, strategies) {
 // ─── Routes ───────────────────────────────────────────────────────────────
 
 /** POST /api/value/scan  (основной) */
-router.post('/scan', async (req, res) => {
+router.post('/scan', scanHandler);
+
+/** GET /api/value/scan  (обратная совместимость — без стратегий) */
+router.get('/scan', async (req, res) => {
+  // Просто повторяем логику POST с параметрами из query
+  req.body = {
+    minEdge:    req.query.minEdge  || 3,
+    sport:      req.query.sport    || 'all',
+    market:     req.query.market   || '',
+    strategies: [],
+  };
+  // Вызываем ту же функцию что и POST /scan
+  return scanHandler(req, res);
+});
+
+async function scanHandler(req, res) {
   const { minEdge=3, sport='all', market='', strategies=[] } = req.body;
   const clickhouse = req.app.locals.clickhouse;
 
@@ -305,7 +320,6 @@ router.post('/scan', async (req, res) => {
     });
   }
 
-  // Определяем ключи
   const keys = sport==='all' ? Object.values(SPORT_KEYS).flat() : (SPORT_KEYS[sport] || SPORT_KEYS.football);
 
   let fixtures = [];
@@ -317,15 +331,11 @@ router.post('/scan', async (req, res) => {
       message:`Нет предстоящих матчей по запросу (sport=${sport}). Попробуйте позже.` });
   }
 
-  // Статистика команд из CH
-  const teams    = [...new Set(fixtures.flatMap(f=>[f.home,f.away]))];
-  const stats    = await loadTeamStats(clickhouse, teams);
-
-  // Value расчёт
-  let allBets = fixtures.flatMap(f => calcBets(f, stats, parseFloat(minEdge)));
+  const teams  = [...new Set(fixtures.flatMap(f=>[f.home,f.away]))];
+  const stats  = await loadTeamStats(clickhouse, teams);
+  let allBets  = fixtures.flatMap(f => calcBets(f, stats, parseFloat(minEdge)));
   if (market) allBets = allBets.filter(b => b.market === market);
 
-  // Стратегии
   const { bets: final, applied } = applyStrategies(allBets, strategies);
   final.sort((a,b) => b.edge - a.edge);
 
@@ -339,17 +349,7 @@ router.post('/scan', async (req, res) => {
     lambdaFromHistory: Object.keys(stats).length,
     sport, market,
   });
-});
-
-/** GET /api/value/scan  (обратная совместимость — без стратегий) */
-router.get('/scan', async (req, res) => {
-  req.body = { minEdge: req.query.minEdge||3, sport: req.query.sport||'all',
-               market: req.query.market||'', strategies: [] };
-  // Перекидываем на POST handler
-  const handler = router.stack.find(l => l.route?.path==='/scan' && l.route?.methods?.post)?.route?.stack?.[0]?.handle;
-  if (handler) return handler(req, res, ()=>{});
-  res.json({ bets:[], source:'no_key', message:'Используйте POST /api/value/scan' });
-});
+}
 
 /** POST /api/value/calculate */
 router.post('/calculate', (req, res) => {
