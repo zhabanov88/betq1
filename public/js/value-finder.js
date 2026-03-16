@@ -53,85 +53,158 @@ const valueFinder = {
   // ── init ──────────────────────────────────────────────────────────────────
   init() {
     this.renderFilters();
-    this.renderStrategySelector();
-    setTimeout(() => this.scan(), 150);
+    const doInit = () => {
+      this.renderStrategySelector();
+      setTimeout(() => this.scan(), 150);
+    };
+    if (typeof library !== 'undefined' && library._strategies && library._strategies.length) {
+      doInit();
+    } else if (typeof library !== 'undefined') {
+      library.load().then(doInit).catch(doInit);
+    } else {
+      doInit();
+    }
   },
 
   // ── Получить стратегии из бэктест движка ──────────────────────────────────
   getStrategies() {
     try {
-      // bq_bt_strategies — это именно тот ключ который использует backtestEngine
-      const bt = JSON.parse(localStorage.getItem('bq_bt_strategies') || '[]');
-      // Также проверяем ai-стратегии которые могут быть в bq_active_strategies
-      const ai = JSON.parse(localStorage.getItem('bq_active_strategies') || '[]');
-      // И сохранённые из библиотеки
-      const lib= JSON.parse(localStorage.getItem('bq_strategies') || '[]');
-
-      const all = [], seen = new Set();
-      const add = (s, src) => {
-        const k = s.id || s.name;
-        if (!seen.has(k)) { seen.add(k); all.push({...s, _src: src}); }
+      const all = [];
+      const seen = new Set();
+      const add = (s, source) => {
+        const key = s.id || s.name;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          all.push({ ...s, _source: source });
+        }
       };
-      bt.forEach(s  => add(s, 'backtest'));
-      ai.forEach(s  => add(s, 'ai'));
-      lib.forEach(s => add(s, 'library'));
+ 
+      // 1. Главный источник — library._strategies (DB + local + builtin)
+      if (typeof library !== 'undefined' && Array.isArray(library._strategies)) {
+        library._strategies.forEach(s => {
+          const src = s.source === 'db' ? 'library' :
+                      s.source === 'local' ? 'library' : 'builtin';
+          add(s, src);
+        });
+      }
+ 
+      // 2. Активные из бэктест движка
+      JSON.parse(localStorage.getItem('bq_active_strategies') || '[]')
+        .forEach(s => add(s, 'backtest'));
+ 
+      // 3. AI-сгенерированные
+      JSON.parse(localStorage.getItem('bq_ai_strategies') || '[]')
+        .forEach(s => add(s, 'ai'));
+ 
+      // 4. Legacy localStorage
+      JSON.parse(localStorage.getItem('bq_strategies') || '[]')
+        .forEach(s => add(s, 'library'));
+ 
       return all;
-    } catch(e) { return []; }
+    } catch (e) {
+      console.warn('[valueFinder] getStrategies:', e);
+      return [];
+    }
   },
 
   // ── UI стратегий ──────────────────────────────────────────────────────────
-  renderStrategySelector() {
-    const el = document.getElementById('vfStrategySelector');
-    if (!el) return;
-    const strats = this.getStrategies();
-
-    if (!strats.length) {
-      el.innerHTML = `
-        <div class="vf-no-strats">
-          <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Нет стратегий</div>
-          <div style="font-size:11px;color:var(--text3);line-height:1.5">
-            Добавьте стратегии в
-            <a href="#" onclick="app.showPanel('backtest');return false" style="color:var(--accent)">Движке бэктеста</a>
-            или через
-            <a href="#" onclick="app.showPanel('ai-strategy');return false" style="color:var(--accent)">AI генератор</a>.<br>
-            Без стратегий — поиск по Poisson + ELO.
-          </div>
-        </div>`;
-      return;
+  async _refreshFromLibrary() {
+    const btn = document.activeElement;
+    const origText = btn?.textContent;
+    if (btn && btn.classList.contains('ctrl-btn')) {
+      btn.textContent = '⏳';
+      btn.disabled = true;
     }
-
-    const items = strats.map(s => {
-      const icon = s._src === 'ai' ? '🤖' : s._src === 'library' ? '📚' : '⚙️';
-      const roi  = s.roi != null && !isNaN(parseFloat(s.roi))
-        ? `<span class="vf-strat-roi ${parseFloat(s.roi)>=0?'pos':'neg'}">${parseFloat(s.roi)>0?'+':''}${parseFloat(s.roi).toFixed(1)}%</span>`
-        : '';
-      const sportTag = s.sport && s.sport !== 'all'
-        ? `<span class="vf-strat-src">${s.sport}</span>` : '';
-      const enabled = s.enabled !== false;
-      return `
-        <label class="vf-strat-check" title="${(s.name||'').replace(/"/g,'&quot;')}">
-          <input type="checkbox" class="vf-strat-cb"
-            value="${s.id||s.name}"
-            data-code="${encodeURIComponent(s.code||'')}"
-            data-sport="${s.sport||'all'}"
-            data-name="${(s.name||'').replace(/"/g,'&quot;')}"
-            ${enabled?'checked':''}>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${icon} ${s.name||'—'}</span>
-          ${roi}${sportTag}
-        </label>`;
-    }).join('');
-
-    el.innerHTML = `
-      <div class="vf-strat-label">
-        Стратегии (${strats.length})
-        <span style="font-size:10px;font-weight:400;color:var(--text3)"> = AI стратегии</span>
-      </div>
-      <div class="vf-strat-list">${items}</div>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <button class="ctrl-btn sm" onclick="valueFinder._checkAll(true)">Все вкл</button>
-        <button class="ctrl-btn sm" onclick="valueFinder._checkAll(false)">Все выкл</button>
-        <button class="ctrl-btn sm" onclick="valueFinder.renderStrategySelector()" title="Обновить список стратегий">↻</button>
-      </div>`;
+    try {
+      if (typeof library !== 'undefined') await library.load();
+      this.renderStrategySelector();
+    } finally {
+      if (btn && btn.classList.contains('ctrl-btn')) {
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
+    }
+  },
+ 
+// ── 5. ЗАМЕНИ функцию _applyStrategies() ─────────────────────────────────
+// (исправлено: работает с library-стратегиями без JS-кода — фильтр по спорту/условиям)
+ 
+  _applyStrategies(bets, activeCodes) {
+    // Получаем выбранные ID из чекбоксов
+    const checkedIds = [];
+    document.querySelectorAll('.vf-strat-cb:checked').forEach(cb => {
+      checkedIds.push(cb.value);
+    });
+    if (!checkedIds.length) return bets;
+ 
+    // Находим объекты стратегий
+    const allStrats = this.getStrategies();
+    const selected  = allStrats.filter(s => checkedIds.includes(s.id || s.name));
+    if (!selected.length) return bets;
+ 
+    const filtered = bets.filter(bet => {
+      return selected.some(strat => this._matchesBet(bet, strat));
+    });
+ 
+    // Если всё отфильтровалось — возвращаем все (не показываем пустой экран)
+    return filtered.length > 0 ? filtered : bets;
+  },
+ 
+// ── 6. ДОБАВЬ вспомогательную функцию _matchesBet() ─────────────────────
+// (вызывается из _applyStrategies)
+ 
+  _matchesBet(bet, strat) {
+    // 1. Если есть JS-код — выполняем в sandbox
+    if (strat.code && strat.code.trim()) {
+      try {
+        // Оборачиваем код в функцию; код должен вернуть true/false
+        // или просто не бросить исключение = принять ставку
+        const fn = new Function('bet', `
+          try {
+            ${strat.code}
+            return true;
+          } catch(e) { return true; }
+        `);
+        return fn({ ...bet });
+      } catch (e) {
+        // Ошибка компиляции — пропускаем через следующие фильтры
+      }
+    }
+ 
+    // 2. Фильтр по спорту стратегии
+    const stratSport = (strat.sport || strat.sport_name || '').toLowerCase();
+    if (stratSport && stratSport !== 'any' && stratSport !== 'all') {
+      const betSport = (bet.sport || '').toLowerCase();
+      if (betSport && !betSport.includes(stratSport) && !stratSport.includes(betSport)) {
+        return false;
+      }
+    }
+ 
+    // 3. Фильтр по рынку стратегии (если задан)
+    if (strat.market && strat.market !== '') {
+      if (bet.market && bet.market !== strat.market) return false;
+    }
+ 
+    // 4. Фильтр по odds_filters / conditions из library-стратегии
+    const conditions = strat.conditions || strat.odds_filters || strat.filters || [];
+    if (Array.isArray(conditions) && conditions.length) {
+      return conditions.every(cond => {
+        const val = parseFloat(bet[cond.field] || bet[cond.stat] || 0);
+        const cv  = parseFloat(cond.value || cond.val || 0);
+        switch (String(cond.op || cond.operator || '>=')) {
+          case '>':  return val >  cv;
+          case '<':  return val <  cv;
+          case '>=': return val >= cv;
+          case '<=': return val <= cv;
+          case '=':
+          case '==': return val === cv;
+          default:   return true;
+        }
+      });
+    }
+ 
+    // 5. Нет ни кода, ни условий — стратегия принимает все ставки
+    return true;
   },
 
   _checkAll(on) {
