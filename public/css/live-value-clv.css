@@ -414,3 +414,63 @@
 }
 
 
+/* ── Карточки матчей (вкладка "Все матчи") ──────────────────────────────── */
+.vf-fixture-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.vf-fixture-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 10px rgba(0,212,255,.12);
+}
+.vf-fixture-card.has-signal {
+  border-color: rgba(0,230,118,.4);
+  background: rgba(0,230,118,.04);
+}
+.vf-fixture-card.has-signal:hover {
+  border-color: var(--green);
+  box-shadow: 0 2px 12px rgba(0,230,118,.2);
+}
+.vf-fc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.vf-fc-signal {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(0,230,118,.12);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.vf-fc-teams {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text1);
+  margin-bottom: 6px;
+}
+.vf-fc-odds {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text2);
+}
+.vf-fc-odds span b {
+  color: var(--text1);
+}
+ 
+/* ── Таблицы в модалке ───────────────────────────────────────────────────── */
+#vfMatchModal .modal-box {
+  width: 720px;
+}
+
+
